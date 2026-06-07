@@ -8,6 +8,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  type DotProps,
 } from "recharts";
 import { Check, Pencil, PlusCircle, Trash2, Wallet } from "lucide-react";
 import {
@@ -239,11 +240,13 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
                   />
                   <Tooltip
                     formatter={(value: number) => [fmt(value), "Net worth"]}
+                    wrapperStyle={{ pointerEvents: "none" }}
                     contentStyle={{
                       background: "var(--card)",
                       border: "1px solid var(--border)",
                       borderRadius: 8,
                       fontSize: 11,
+                      pointerEvents: "none",
                     }}
                   />
                   <Area
@@ -254,24 +257,13 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
                     fill="currentColor"
                     fillOpacity={0.1}
                     strokeOpacity={0.6}
-                    dot={(props) => {
-                      const { cx, cy, index } = props;
-                      const point = netWorthHistory[index];
-                      if (cx == null || cy == null || !point) return null;
-
-                      return (
-                        <circle
-                          key={point.id}
-                          cx={cx}
-                          cy={cy}
-                          r={5}
-                          fill="currentColor"
-                          className="cursor-pointer opacity-70 hover:opacity-100"
-                          onClick={() => setSelectedSnapshot(point)}
-                        />
-                      );
-                    }}
-                    activeDot={{ r: 7 }}
+                    isAnimationActive={false}
+                    dot={(props) => (
+                      <SnapshotChartDot {...props} onSelect={setSelectedSnapshot} />
+                    )}
+                    activeDot={(props) => (
+                      <SnapshotChartDot {...props} onSelect={setSelectedSnapshot} active />
+                    )}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -374,6 +366,41 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
         </>
       )}
     </div>
+  );
+}
+
+function SnapshotChartDot({
+  cx,
+  cy,
+  payload,
+  onSelect,
+  active = false,
+}: DotProps & { onSelect: (point: NetWorthPoint) => void; active?: boolean }) {
+  if (cx == null || cy == null || !payload) return null;
+
+  const point = payload as NetWorthPoint;
+  const visibleRadius = active ? 7 : 5;
+
+  return (
+    <g
+      className="cursor-pointer"
+      style={{ pointerEvents: "all" }}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect(point);
+      }}
+    >
+      <circle cx={cx} cy={cy} r={14} fill="transparent" aria-hidden="true" />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={visibleRadius}
+        fill="currentColor"
+        stroke={active ? "var(--background)" : "none"}
+        strokeWidth={active ? 2 : 0}
+        className={active ? "opacity-100" : "opacity-70 hover:opacity-100"}
+      />
+    </g>
   );
 }
 
