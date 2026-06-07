@@ -7,9 +7,13 @@ import {
   buildSparklineData,
   createAsset,
   deleteAsset,
+  deleteBalanceSnapshot,
   fetchAssets,
   fetchSnapshots,
+  getSnapshotBalances,
   saveBalanceSnapshot,
+  updateBalanceSnapshot,
+  type SnapshotWithEntries,
 } from "../lib/assetsApi";
 
 interface UseAssetsResult {
@@ -22,9 +26,13 @@ interface UseAssetsResult {
   hasAssets: boolean;
   hasSnapshots: boolean;
   getSparkline: (assetId: string) => number[];
+  getSnapshot: (snapshotId: string) => SnapshotWithEntries | undefined;
+  getSnapshotBalancesForEdit: (snapshotId: string) => Record<string, number>;
   addAsset: (input: { name: string; institution: string; groupId: AssetGroupId }) => Promise<void>;
   removeAsset: (assetId: string) => Promise<void>;
   saveBalances: (balances: Record<string, number>) => Promise<void>;
+  updateSnapshot: (snapshotId: string, balances: Record<string, number>) => Promise<void>;
+  removeSnapshot: (snapshotId: string) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -34,11 +42,13 @@ export function useAssets(session: Session | null): UseAssetsResult {
   const [error, setError] = useState<string | null>(null);
   const [assets, setAssets] = useState<AssetWithBalance[]>([]);
   const [netWorthHistory, setNetWorthHistory] = useState<NetWorthPoint[]>([]);
-  const [snapshots, setSnapshots] = useState<Awaited<ReturnType<typeof fetchSnapshots>>>([]);
+  const [snapshots, setSnapshots] = useState<SnapshotWithEntries[]>([]);
+  const [rawAssets, setRawAssets] = useState<Awaited<ReturnType<typeof fetchAssets>>>([]);
 
   const refresh = useCallback(async () => {
     if (!session?.user.id) {
       setAssets([]);
+      setRawAssets([]);
       setNetWorthHistory([]);
       setSnapshots([]);
       setLoading(false);
@@ -55,6 +65,7 @@ export function useAssets(session: Session | null): UseAssetsResult {
       ]);
 
       setSnapshots(snapshotRows);
+      setRawAssets(assetRows);
       setAssets(buildAssetsWithBalances(assetRows, snapshotRows));
       setNetWorthHistory(buildNetWorthHistory(snapshotRows));
     } catch (err) {
@@ -76,6 +87,16 @@ export function useAssets(session: Session | null): UseAssetsResult {
   const getSparkline = useCallback(
     (assetId: string) => buildSparklineData(assetId, snapshots),
     [snapshots],
+  );
+
+  const getSnapshot = useCallback(
+    (snapshotId: string) => snapshots.find((snapshot) => snapshot.id === snapshotId),
+    [snapshots],
+  );
+
+  const getSnapshotBalancesForEdit = useCallback(
+    (snapshotId: string) => getSnapshotBalances(getSnapshot(snapshotId), rawAssets),
+    [getSnapshot, rawAssets],
   );
 
   const addAsset = useCallback(
@@ -122,7 +143,7 @@ export function useAssets(session: Session | null): UseAssetsResult {
       setError(null);
 
       try {
-        const entries = assets.map((asset) => ({
+        const entries = rawAssets.map((asset) => ({
           asset_id: asset.id,
           balance: balances[asset.id] ?? 0,
         }));
@@ -136,7 +157,48 @@ export function useAssets(session: Session | null): UseAssetsResult {
         setSaving(false);
       }
     },
-    [assets, refresh],
+    [rawAssets, refresh],
+  );
+
+  const updateSnapshot = useCallback(
+    async (snapshotId: string, balances: Record<string, number>) => {
+      setSaving(true);
+      setError(null);
+
+      try {
+        const entries = rawAssets.map((asset) => ({
+          asset_id: asset.id,
+          balance: balances[asset.id] ?? 0,
+        }));
+
+        await updateBalanceSnapshot(snapshotId, entries);
+        await refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update snapshot");
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [rawAssets, refresh],
+  );
+
+  const removeSnapshot = useCallback(
+    async (snapshotId: string) => {
+      setSaving(true);
+      setError(null);
+
+      try {
+        await deleteBalanceSnapshot(snapshotId);
+        await refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to delete snapshot");
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [refresh],
   );
 
   return {
@@ -149,9 +211,13 @@ export function useAssets(session: Session | null): UseAssetsResult {
     hasAssets: assets.length > 0,
     hasSnapshots: netWorthHistory.length > 0,
     getSparkline,
+    getSnapshot,
+    getSnapshotBalancesForEdit,
     addAsset,
     removeAsset,
     saveBalances,
+    updateSnapshot,
+    removeSnapshot,
     refresh,
   };
 }

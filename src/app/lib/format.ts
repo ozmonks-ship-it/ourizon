@@ -11,3 +11,10 @@ export const fmtK = (n: number) =>
     : n >= 1_000
       ? `$${Math.round(n / 1000)}k`
       : `$${Math.round(n)}`;
+
+export const fmtSnapshotDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });

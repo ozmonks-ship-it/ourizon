@@ -81,6 +81,13 @@ export interface Database {
         Args: { p_entries: { asset_id: string; balance: number }[] };
         Returns: string;
       };
+      update_balance_snapshot: {
+        Args: {
+          p_snapshot_id: string;
+          p_entries: { asset_id: string; balance: number }[];
+        };
+        Returns: void;
+      };
     };
   };
 }
@@ -94,6 +101,7 @@ export interface AssetWithBalance extends Asset {
 }
 
 export interface NetWorthPoint {
+  id: string;
   label: string;
   value: number;
   recordedAt: string;

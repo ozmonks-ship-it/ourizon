@@ -11,7 +11,7 @@ interface SnapshotEntryRow {
   balance: number;
 }
 
-interface SnapshotWithEntries {
+export interface SnapshotWithEntries {
   id: string;
   recorded_at: string;
   total_worth: number;
@@ -62,10 +62,23 @@ export function buildAssetsWithBalances(
 
 export function buildNetWorthHistory(snapshots: SnapshotWithEntries[]): NetWorthPoint[] {
   return snapshots.map((snapshot) => ({
+    id: snapshot.id,
     label: formatSnapshotLabel(snapshot.recorded_at),
     value: Number(snapshot.total_worth),
     recordedAt: snapshot.recorded_at,
   }));
+}
+
+export function getSnapshotBalances(
+  snapshot: SnapshotWithEntries | undefined,
+  assets: Asset[],
+): Record<string, number> {
+  const balances: Record<string, number> = {};
+  for (const asset of assets) {
+    const entry = snapshot?.balance_snapshot_entries.find((row) => row.asset_id === asset.id);
+    balances[asset.id] = entry ? Number(entry.balance) : 0;
+  }
+  return balances;
 }
 
 export function buildSparklineData(
@@ -116,6 +129,25 @@ export async function saveBalanceSnapshot(
 
   if (error) throw error;
   return data as string;
+}
+
+export async function updateBalanceSnapshot(
+  snapshotId: string,
+  entries: { asset_id: string; balance: number }[],
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("update_balance_snapshot", {
+    p_snapshot_id: snapshotId,
+    p_entries: entries,
+  });
+
+  if (error) throw error;
+}
+
+export async function deleteBalanceSnapshot(snapshotId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("balance_snapshots").delete().eq("id", snapshotId);
+  if (error) throw error;
 }
 
 function formatSnapshotLabel(iso: string): string {

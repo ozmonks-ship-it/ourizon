@@ -27,9 +27,9 @@ import {
 } from "../components/ui/select";
 import { ASSET_GROUPS } from "../data/assetGroups";
 import { useAssets } from "../hooks/useAssets";
-import { fmt, fmtK } from "../lib/format";
+import { fmt, fmtK, fmtSnapshotDate } from "../lib/format";
 import { Sparkline } from "../components/Sparkline";
-import type { AssetGroupId, AssetWithBalance } from "@/lib/supabase/database.types";
+import type { AssetGroupId, AssetWithBalance, NetWorthPoint } from "@/lib/supabase/database.types";
 
 interface AssetsScreenProps {
   session: Session;
@@ -49,10 +49,15 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
     addAsset,
     removeAsset,
     saveBalances,
+    updateSnapshot,
+    removeSnapshot,
+    getSnapshotBalancesForEdit,
   } = useAssets(session);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingBalances, setEditingBalances] = useState(false);
+  const [editingSnapshotId, setEditingSnapshotId] = useState<string | null>(null);
+  const [selectedSnapshot, setSelectedSnapshot] = useState<NetWorthPoint | null>(null);
   const [draftBalances, setDraftBalances] = useState<Record<string, string>>({});
   const [newAsset, setNewAsset] = useState({
     name: "",
@@ -72,12 +77,26 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
     for (const asset of assets) {
       nextDraft[asset.id] = asset.balance === null ? "" : String(asset.balance);
     }
+    setEditingSnapshotId(null);
     setDraftBalances(nextDraft);
     setEditingBalances(true);
   };
 
+  const startEditingSnapshot = (snapshot: NetWorthPoint) => {
+    const balances = getSnapshotBalancesForEdit(snapshot.id);
+    const nextDraft: Record<string, string> = {};
+    for (const asset of assets) {
+      nextDraft[asset.id] = String(balances[asset.id] ?? 0);
+    }
+    setEditingSnapshotId(snapshot.id);
+    setDraftBalances(nextDraft);
+    setEditingBalances(true);
+    setSelectedSnapshot(null);
+  };
+
   const cancelEditingBalances = () => {
     setEditingBalances(false);
+    setEditingSnapshotId(null);
     setDraftBalances({});
   };
 
@@ -92,9 +111,26 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
     }
 
     try {
-      await saveBalances(parsed);
-      setEditingBalances(false);
-      setDraftBalances({});
+      if (editingSnapshotId) {
+        await updateSnapshot(editingSnapshotId, parsed);
+      } else {
+        await saveBalances(parsed);
+      }
+      cancelEditingBalances();
+    } catch {
+      // Error surfaced via hook state.
+    }
+  };
+
+  const handleDeleteSnapshot = async () => {
+    if (!selectedSnapshot) return;
+
+    try {
+      if (editingSnapshotId === selectedSnapshot.id) {
+        cancelEditingBalances();
+      }
+      await removeSnapshot(selectedSnapshot.id);
+      setSelectedSnapshot(null);
     } catch {
       // Error surfaced via hook state.
     }
@@ -181,7 +217,9 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
           {hasSnapshots && (
             <div className="bg-card rounded-xl p-5 border border-border">
               <h2 className="font-medium text-base text-foreground mb-0.5">Net Worth 📈</h2>
-              <p className="text-xs text-muted-foreground mb-4">Saved balance snapshots over time</p>
+              <p className="text-xs text-muted-foreground mb-4">
+                Click a point to edit or delete a snapshot
+              </p>
               <ResponsiveContainer width="100%" height={160}>
                 <AreaChart data={netWorthHistory} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.08} vertical={false} />
@@ -215,18 +253,47 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
                     strokeWidth={2}
                     fill="currentColor"
                     fillOpacity={0.1}
-                    dot={false}
                     strokeOpacity={0.6}
+                    dot={(props) => {
+                      const { cx, cy, index } = props;
+                      const point = netWorthHistory[index];
+                      if (cx == null || cy == null || !point) return null;
+
+                      return (
+                        <circle
+                          key={point.id}
+                          cx={cx}
+                          cy={cy}
+                          r={5}
+                          fill="currentColor"
+                          className="cursor-pointer opacity-70 hover:opacity-100"
+                          onClick={() => setSelectedSnapshot(point)}
+                        />
+                      );
+                    }}
+                    activeDot={{ r: 7 }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           )}
 
+          <SnapshotActionDialog
+            snapshot={selectedSnapshot}
+            saving={saving}
+            onClose={() => setSelectedSnapshot(null)}
+            onEdit={() => selectedSnapshot && startEditingSnapshot(selectedSnapshot)}
+            onDelete={() => void handleDeleteSnapshot()}
+          />
+
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
               {editingBalances
-                ? "Enter balances for all assets, then save once."
+                ? editingSnapshotId
+                  ? `Editing snapshot from ${fmtSnapshotDate(
+                      netWorthHistory.find((point) => point.id === editingSnapshotId)?.recordedAt ?? "",
+                    )}.`
+                  : "Enter balances for all assets, then save once."
                 : hasSnapshots
                   ? "Balances reflect your latest saved snapshot."
                   : "Save your first balance snapshot to start the net worth chart."}
@@ -258,7 +325,7 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50"
                 >
                   <Check size={16} />
-                  {saving ? "Saving…" : "Save snapshot"}
+                  {saving ? "Saving…" : editingSnapshotId ? "Save changes" : "Save snapshot"}
                 </button>
               </div>
             )}
@@ -307,6 +374,58 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
         </>
       )}
     </div>
+  );
+}
+
+function SnapshotActionDialog({
+  snapshot,
+  saving,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  snapshot: NetWorthPoint | null;
+  saving: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Dialog open={snapshot !== null} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-medium">Snapshot</DialogTitle>
+        </DialogHeader>
+        {snapshot && (
+          <div className="space-y-4 py-1">
+            <div>
+              <p className="text-sm text-muted-foreground">{fmtSnapshotDate(snapshot.recordedAt)}</p>
+              <p className="text-xl font-medium text-foreground mt-1">{fmt(snapshot.value)}</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={onEdit}
+                disabled={saving}
+                className="flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50"
+              >
+                <Pencil size={16} />
+                Edit balances
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={saving}
+                className="flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-border bg-card text-foreground font-medium text-sm transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                <Trash2 size={16} />
+                {saving ? "Deleting…" : "Delete snapshot"}
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
