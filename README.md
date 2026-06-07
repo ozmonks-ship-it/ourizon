@@ -21,7 +21,7 @@ npm run dev
 
 ## Database
 
-Run the migration in [`supabase/migrations/`](supabase/migrations/) against your Supabase project. See [`supabase/README.md`](supabase/README.md).
+Apply the SQL migrations in [`supabase/migrations/`](supabase/migrations/) via the Supabase Dashboard (see [`supabase/README.md`](supabase/README.md)). The Supabase CLI is optional.
 
 Requires `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`.
 

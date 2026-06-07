@@ -1,12 +1,45 @@
 # Supabase database
 
-Apply the migration in the Supabase SQL editor or via the CLI:
+## Option A — Supabase Dashboard (no CLI required)
 
+This is the easiest approach if `supabase` is not installed.
+
+1. Open your project at [supabase.com/dashboard](https://supabase.com/dashboard)
+2. Go to **SQL Editor → New query**
+3. Paste and run `migrations/20250607000000_assets.sql`
+4. Paste and run `migrations/20250607100000_snapshot_edit.sql`
+
+Run them in that order. If you already applied the first migration, only run the second one.
+
+## Option B — Supabase CLI
+
+The CLI is not installed by default. Install it first, then link your project.
+
+### Install (pick one)
+
+**macOS (Homebrew):**
 ```bash
-supabase db push
+brew install supabase/tap/supabase
 ```
 
-Or paste the contents of `migrations/20250607000000_assets.sql` into **Supabase → SQL → New query**.
+**npm (project-local, no global install):**
+```bash
+cd react-web-app
+npm install supabase --save-dev
+```
+
+Then use `npx supabase` instead of `supabase`.
+
+### Link and push
+
+```bash
+cd react-web-app
+npx supabase login
+npx supabase link --project-ref YOUR_PROJECT_REF
+npx supabase db push
+```
+
+`YOUR_PROJECT_REF` is the ID in your Supabase project URL: `https://supabase.com/dashboard/project/YOUR_PROJECT_REF`.
 
 ## Schema
 
