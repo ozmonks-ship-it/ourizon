@@ -61,7 +61,7 @@ export default function App() {
     <div className="dark">
       <div className="min-h-screen bg-background text-foreground">
         <AppLayout>
-          <AssetsScreen />
+          <AssetsScreen session={session} />
         </AppLayout>
       </div>
     </div>
