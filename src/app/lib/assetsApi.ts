@@ -5,6 +5,7 @@ import type {
   AssetWithBalance,
   NetWorthPoint,
 } from "@/lib/supabase/database.types";
+import { resolveBudgetOwnerId } from "./collaborationApi";
 
 interface SnapshotEntryRow {
   asset_id: string;
@@ -18,29 +19,31 @@ export interface SnapshotWithEntries {
   balance_snapshot_entries: SnapshotEntryRow[];
 }
 
-export async function fetchAssets(userId: string): Promise<Asset[]> {
+export async function fetchAssets(budgetOwnerId: string): Promise<Asset[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("assets")
     .select("*")
-    .eq("user_id", userId)
+    .eq("user_id", budgetOwnerId)
     .order("created_at", { ascending: true });
 
   if (error) throw error;
   return data ?? [];
 }
 
-export async function fetchSnapshots(userId: string): Promise<SnapshotWithEntries[]> {
+export async function fetchSnapshots(budgetOwnerId: string): Promise<SnapshotWithEntries[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("balance_snapshots")
     .select("id, recorded_at, total_worth, balance_snapshot_entries(asset_id, balance)")
-    .eq("user_id", userId)
+    .eq("user_id", budgetOwnerId)
     .order("recorded_at", { ascending: true });
 
   if (error) throw error;
   return (data ?? []) as SnapshotWithEntries[];
 }
+
+export { resolveBudgetOwnerId };
 
 export function buildAssetsWithBalances(
   assets: Asset[],
@@ -94,14 +97,14 @@ export function buildSparklineData(
 }
 
 export async function createAsset(
-  userId: string,
+  budgetOwnerId: string,
   input: { name: string; institution: string; groupId: AssetGroupId },
 ): Promise<Asset> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("assets")
     .insert({
-      user_id: userId,
+      user_id: budgetOwnerId,
       name: input.name.trim(),
       institution: input.institution.trim() || "Self-managed",
       group_id: input.groupId,

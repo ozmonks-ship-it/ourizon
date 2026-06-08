@@ -258,11 +258,16 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
                     fillOpacity={0.1}
                     strokeOpacity={0.6}
                     isAnimationActive={false}
-                    dot={(props) => (
-                      <SnapshotChartDot {...props} onSelect={setSelectedSnapshot} />
+                    dot={({ key, ...props }) => (
+                      <SnapshotChartDot key={key} {...props} onSelect={setSelectedSnapshot} />
                     )}
-                    activeDot={(props) => (
-                      <SnapshotChartDot {...props} onSelect={setSelectedSnapshot} active />
+                    activeDot={({ key, ...props }) => (
+                      <SnapshotChartDot
+                        key={key}
+                        {...props}
+                        onSelect={setSelectedSnapshot}
+                        active
+                      />
                     )}
                   />
                 </AreaChart>

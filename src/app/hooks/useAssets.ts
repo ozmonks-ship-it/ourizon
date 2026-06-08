@@ -11,6 +11,7 @@ import {
   fetchAssets,
   fetchSnapshots,
   getSnapshotBalances,
+  resolveBudgetOwnerId,
   saveBalanceSnapshot,
   updateBalanceSnapshot,
   type SnapshotWithEntries,
@@ -44,6 +45,7 @@ export function useAssets(session: Session | null): UseAssetsResult {
   const [netWorthHistory, setNetWorthHistory] = useState<NetWorthPoint[]>([]);
   const [snapshots, setSnapshots] = useState<SnapshotWithEntries[]>([]);
   const [rawAssets, setRawAssets] = useState<Awaited<ReturnType<typeof fetchAssets>>>([]);
+  const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!session?.user.id) {
@@ -51,6 +53,7 @@ export function useAssets(session: Session | null): UseAssetsResult {
       setRawAssets([]);
       setNetWorthHistory([]);
       setSnapshots([]);
+      setBudgetOwnerId(null);
       setLoading(false);
       return;
     }
@@ -59,9 +62,12 @@ export function useAssets(session: Session | null): UseAssetsResult {
     setError(null);
 
     try {
+      const ownerId = await resolveBudgetOwnerId(session.user.id);
+      setBudgetOwnerId(ownerId);
+
       const [assetRows, snapshotRows] = await Promise.all([
-        fetchAssets(session.user.id),
-        fetchSnapshots(session.user.id),
+        fetchAssets(ownerId),
+        fetchSnapshots(ownerId),
       ]);
 
       setSnapshots(snapshotRows);
@@ -101,13 +107,13 @@ export function useAssets(session: Session | null): UseAssetsResult {
 
   const addAsset = useCallback(
     async (input: { name: string; institution: string; groupId: AssetGroupId }) => {
-      if (!session?.user.id) return;
+      if (!budgetOwnerId) return;
 
       setSaving(true);
       setError(null);
 
       try {
-        await createAsset(session.user.id, input);
+        await createAsset(budgetOwnerId, input);
         await refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to add asset");
@@ -116,7 +122,7 @@ export function useAssets(session: Session | null): UseAssetsResult {
         setSaving(false);
       }
     },
-    [refresh, session?.user.id],
+    [budgetOwnerId, refresh],
   );
 
   const removeAsset = useCallback(

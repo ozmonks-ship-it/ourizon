@@ -3,6 +3,52 @@ export type AssetGroupId = "cash" | "stocks" | "crypto" | "property" | "super";
 export interface Database {
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          id: string;
+          email: string;
+          display_name: string | null;
+          avatar_url: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          email: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          updated_at?: string;
+        };
+      };
+      budget_collaborators: {
+        Row: {
+          id: string;
+          owner_id: string;
+          collaborator_id: string | null;
+          email: string;
+          invited_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          collaborator_id?: string | null;
+          email: string;
+          invited_at?: string;
+        };
+        Update: {
+          id?: string;
+          owner_id?: string;
+          collaborator_id?: string | null;
+          email?: string;
+          invited_at?: string;
+        };
+      };
       assets: {
         Row: {
           id: string;
@@ -88,10 +134,17 @@ export interface Database {
         };
         Returns: void;
       };
+      upsert_profile: { Args: Record<string, never>; Returns: void };
+      link_pending_invites: { Args: Record<string, never>; Returns: void };
+      invite_budget_collaborator: { Args: { p_email: string }; Returns: string };
+      remove_budget_collaborator: { Args: { p_invite_id: string }; Returns: void };
+      resolve_budget_user_id: { Args: Record<string, never>; Returns: string };
     };
   };
 }
 
+export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+export type BudgetCollaborator = Database["public"]["Tables"]["budget_collaborators"]["Row"];
 export type Asset = Database["public"]["Tables"]["assets"]["Row"];
 export type BalanceSnapshot = Database["public"]["Tables"]["balance_snapshots"]["Row"];
 export type BalanceSnapshotEntry = Database["public"]["Tables"]["balance_snapshot_entries"]["Row"];

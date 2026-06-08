@@ -1,4 +1,6 @@
+import type { Session } from "@supabase/supabase-js";
 import { OurizonLogo } from "./OurizonLogo";
+import { CollaboratorsMenu } from "./CollaboratorsMenu";
 
 export type NavScreen = "dashboard" | "assets" | "monthly" | "forecast" | "family";
 
@@ -10,7 +12,13 @@ const NAV: { id: NavScreen; label: string; emoji: string; enabled: boolean }[] =
   { id: "family", label: "Family", emoji: "👨‍👩‍👧", enabled: false },
 ];
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+export function AppLayout({
+  children,
+  session,
+}: {
+  children: React.ReactNode;
+  session: Session;
+}) {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm shrink-0">
@@ -20,16 +28,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="text-lg font-medium text-foreground">Ourizon</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex -space-x-1.5">
-              {[{ emoji: "🌸" }, { emoji: "🌊" }].map((member, i) => (
-                <div
-                  key={i}
-                  className="w-7 h-7 rounded-full border-2 border-background flex items-center justify-center text-xs bg-muted"
-                >
-                  {member.emoji}
-                </div>
-              ))}
-            </div>
+            <CollaboratorsMenu session={session} />
           </div>
         </div>
       </header>

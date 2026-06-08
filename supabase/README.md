@@ -8,8 +8,10 @@ This is the easiest approach if `supabase` is not installed.
 2. Go to **SQL Editor → New query**
 3. Paste and run `migrations/20250607000000_assets.sql`
 4. Paste and run `migrations/20250607100000_snapshot_edit.sql`
+5. Paste and run `migrations/20250608100000_collaboration.sql`
+6. Paste and run `migrations/20250608110000_fix_collaboration_rls.sql`
 
-Run them in that order. If you already applied the first migration, only run the second one.
+Run them in that order. If you already applied earlier migrations, only run the ones you have not applied yet.
 
 ## Option B — Supabase CLI
 
@@ -45,6 +47,8 @@ npx supabase db push
 
 | Table | Purpose |
 |-------|---------|
+| `profiles` | Google display name and avatar per user |
+| `budget_collaborators` | Email invites and active collaborators for a shared budget |
 | `assets` | User-owned accounts/investments (name, institution, type) |
 | `balance_snapshots` | Net worth at a point in time (`recorded_at`, `total_worth`) |
 | `balance_snapshot_entries` | Balance per asset within a snapshot |
@@ -53,4 +57,4 @@ Saving balances calls the `save_balance_snapshot(jsonb)` RPC, which validates th
 
 Editing an existing snapshot uses `update_balance_snapshot(uuid, jsonb)`, which replaces entries and recalculates `total_worth` while keeping `recorded_at`. Deleting a snapshot cascades to its entries via RLS.
 
-Row level security restricts all tables to `auth.uid()`.
+Row level security restricts financial data to budget members via `can_access_budget()`. Collaborators are invited by email in the app (no email is sent); when the invitee signs in with Google using that address, they get full access to the owner's assets and snapshots.
