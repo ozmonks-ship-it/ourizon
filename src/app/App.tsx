@@ -5,6 +5,7 @@ import { AssetsScreen } from "./screens/AssetsScreen";
 import { LogScreen } from "./screens/LogScreen";
 import { AuthCallbackScreen } from "./screens/AuthCallbackScreen";
 import { LoginScreen } from "./screens/LoginScreen";
+import { PwaInstallBanner } from "./components/PwaInstallBanner";
 import { bootstrapCollaboration } from "./lib/collaborationApi";
 import { createClient } from "@/lib/supabase/client";
 
@@ -57,6 +58,7 @@ export default function App() {
     return (
       <div className="dark">
         <AuthCallbackScreen />
+        <PwaInstallBanner />
       </div>
     );
   }
@@ -73,6 +75,7 @@ export default function App() {
     return (
       <div className="dark">
         <LoginScreen />
+        <PwaInstallBanner />
       </div>
     );
   }
@@ -92,6 +95,7 @@ export default function App() {
           {screen === "assets" && <AssetsScreen session={session} />}
           {screen === "monthly" && <LogScreen session={session} />}
         </AppLayout>
+        <PwaInstallBanner aboveNav />
       </div>
     </div>
   );
