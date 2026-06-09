@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { AppLayout } from "./components/AppLayout";
+import { AppLayout, type NavScreen } from "./components/AppLayout";
 import { AssetsScreen } from "./screens/AssetsScreen";
+import { LogScreen } from "./screens/LogScreen";
 import { AuthCallbackScreen } from "./screens/AuthCallbackScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { bootstrapCollaboration } from "./lib/collaborationApi";
@@ -11,6 +12,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [bootstrapped, setBootstrapped] = useState(false);
+  const [screen, setScreen] = useState<NavScreen>("assets");
   const isAuthCallback = window.location.pathname === "/auth/callback";
 
   useEffect(() => {
@@ -86,8 +88,9 @@ export default function App() {
   return (
     <div className="dark">
       <div className="min-h-screen bg-background text-foreground">
-        <AppLayout session={session}>
-          <AssetsScreen session={session} />
+        <AppLayout session={session} screen={screen} onNavigate={setScreen}>
+          {screen === "assets" && <AssetsScreen session={session} />}
+          {screen === "monthly" && <LogScreen session={session} />}
         </AppLayout>
       </div>
     </div>

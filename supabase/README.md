@@ -10,6 +10,7 @@ This is the easiest approach if `supabase` is not installed.
 4. Paste and run `migrations/20250607100000_snapshot_edit.sql`
 5. Paste and run `migrations/20250608100000_collaboration.sql`
 6. Paste and run `migrations/20250608110000_fix_collaboration_rls.sql`
+7. Paste and run `migrations/20250609100000_buckets.sql`
 
 Run them in that order. If you already applied earlier migrations, only run the ones you have not applied yet.
 
@@ -52,6 +53,9 @@ npx supabase db push
 | `assets` | User-owned accounts/investments (name, institution, type) |
 | `balance_snapshots` | Net worth at a point in time (`recorded_at`, `total_worth`) |
 | `balance_snapshot_entries` | Balance per asset within a snapshot |
+| `buckets` | Income/expense bucket definitions (amount or % allocation) |
+| `monthly_logs` | One log per calendar month (`net_income`, year, month) |
+| `monthly_log_entries` | Per-bucket values and resolved amounts for a monthly log |
 
 Saving balances calls the `save_balance_snapshot(jsonb)` RPC, which validates that every asset has an entry, stores the total, and writes all per-asset balances atomically.
 

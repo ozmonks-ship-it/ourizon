@@ -7,7 +7,7 @@ export type NavScreen = "dashboard" | "assets" | "monthly" | "forecast" | "famil
 const NAV: { id: NavScreen; label: string; emoji: string; enabled: boolean }[] = [
   { id: "dashboard", label: "Home", emoji: "🏠", enabled: false },
   { id: "assets", label: "Assets", emoji: "💰", enabled: true },
-  { id: "monthly", label: "Log", emoji: "📝", enabled: false },
+  { id: "monthly", label: "Log", emoji: "📝", enabled: true },
   { id: "forecast", label: "Forecast", emoji: "🔭", enabled: false },
   { id: "family", label: "Family", emoji: "👨‍👩‍👧", enabled: false },
 ];
@@ -15,9 +15,13 @@ const NAV: { id: NavScreen; label: string; emoji: string; enabled: boolean }[] =
 export function AppLayout({
   children,
   session,
+  screen,
+  onNavigate,
 }: {
   children: React.ReactNode;
   session: Session;
+  screen: NavScreen;
+  onNavigate: (id: NavScreen) => void;
 }) {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
@@ -39,12 +43,13 @@ export function AppLayout({
 
       <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border flex z-50">
         {NAV.map(({ id, label, emoji, enabled }) => {
-          const active = id === "assets";
+          const active = id === screen;
           return (
             <button
               key={id}
               type="button"
               disabled={!enabled}
+              onClick={() => enabled && onNavigate(id)}
               aria-current={active ? "page" : undefined}
               className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-[10px] font-medium transition-all duration-200 ${
                 active
