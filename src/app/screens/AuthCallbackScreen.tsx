@@ -6,33 +6,53 @@ export function AuthCallbackScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function handleCallback() {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-      const errorDescription = params.get("error_description");
+    const params = new URLSearchParams(window.location.search);
+    const errorDescription = params.get("error_description");
 
-      if (errorDescription) {
-        setError(errorDescription);
-        return;
-      }
-
-      if (!code) {
-        setError("Missing authorization code. Please try signing in again.");
-        return;
-      }
-
-      const supabase = createClient();
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-      if (exchangeError) {
-        setError(exchangeError.message);
-        return;
-      }
-
-      window.location.replace("/");
+    if (errorDescription) {
+      setError(errorDescription);
+      return;
     }
 
-    handleCallback();
+    if (!params.get("code")) {
+      setError("Missing authorization code. Please try signing in again.");
+      return;
+    }
+
+    const supabase = createClient();
+
+    // createBrowserClient exchanges the PKCE code automatically on init
+    // (detectSessionInUrl). Calling exchangeCodeForSession again fails because
+    // the verifier is already consumed.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        window.location.replace("/");
+      }
+    });
+
+    void supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
+      if (sessionError) {
+        setError(sessionError.message);
+        return;
+      }
+      if (session) {
+        window.location.replace("/");
+      }
+    });
+
+    const timeout = window.setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setError("Sign-in failed. Please try again.");
+      }
+    }, 10_000);
+
+    return () => {
+      subscription.unsubscribe();
+      window.clearTimeout(timeout);
+    };
   }, []);
 
   return (
