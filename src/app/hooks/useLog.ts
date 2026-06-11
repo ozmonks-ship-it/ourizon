@@ -13,9 +13,18 @@ import {
   updateBucket,
 } from "../lib/logApi";
 
-function currentPeriod(): { year: number; month: number } {
+export function currentPeriod(): { year: number; month: number } {
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
+
+export function periodToMonthInput(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+export function monthInputToPeriod(value: string): { year: number; month: number } {
+  const [year, month] = value.split("-").map(Number);
+  return { year, month };
 }
 
 function parseDraftValue(raw: string): number {
@@ -57,12 +66,14 @@ interface UseLogResult {
     },
   ) => Promise<void>;
   removeBucket: (bucketId: string) => Promise<void>;
-  saveLog: () => Promise<void>;
+  saveBuckets: () => Promise<void>;
+  setSelectedPeriod: (year: number, month: number) => void;
   refresh: () => Promise<void>;
 }
 
 export function useLog(session: Session | null): UseLogResult {
-  const { year, month } = currentPeriod();
+  const [selectedPeriod, setSelectedPeriodState] = useState(currentPeriod);
+  const { year, month } = selectedPeriod;
   const monthLabel = new Date(year, month - 1, 1).toLocaleString("default", {
     month: "long",
     year: "numeric",
@@ -268,7 +279,12 @@ export function useLog(session: Session | null): UseLogResult {
     [refresh],
   );
 
-  const saveLog = useCallback(async () => {
+  const setSelectedPeriod = useCallback((nextYear: number, nextMonth: number) => {
+    setSelectedPeriodState({ year: nextYear, month: nextMonth });
+    setSaved(false);
+  }, []);
+
+  const saveBuckets = useCallback(async () => {
     setSaving(true);
     setError(null);
 
@@ -314,7 +330,8 @@ export function useLog(session: Session | null): UseLogResult {
     addBucket,
     editBucket,
     removeBucket,
-    saveLog,
+    saveBuckets,
+    setSelectedPeriod,
     refresh,
   };
 }

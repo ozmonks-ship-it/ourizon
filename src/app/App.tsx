@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { AppLayout, type NavScreen } from "./components/AppLayout";
 import { AssetsScreen } from "./screens/AssetsScreen";
-import { LogScreen } from "./screens/LogScreen";
+import { BucketsScreen } from "./screens/BucketsScreen";
 import { AuthCallbackScreen } from "./screens/AuthCallbackScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { PwaInstallBanner } from "./components/PwaInstallBanner";
@@ -93,7 +93,7 @@ export default function App() {
       <div className="min-h-screen bg-background text-foreground">
         <AppLayout session={session} screen={screen} onNavigate={setScreen}>
           {screen === "assets" && <AssetsScreen session={session} />}
-          {screen === "monthly" && <LogScreen session={session} />}
+          {screen === "monthly" && <BucketsScreen session={session} />}
         </AppLayout>
         <PwaInstallBanner aboveNav />
       </div>

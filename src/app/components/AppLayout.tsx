@@ -7,7 +7,7 @@ export type NavScreen = "dashboard" | "assets" | "monthly" | "forecast" | "famil
 const NAV: { id: NavScreen; label: string; emoji: string; enabled: boolean }[] = [
   { id: "dashboard", label: "Home", emoji: "🏠", enabled: false },
   { id: "assets", label: "Assets", emoji: "💰", enabled: true },
-  { id: "monthly", label: "Log", emoji: "📝", enabled: true },
+  { id: "monthly", label: "Buckets", emoji: "🪣", enabled: true },
   { id: "forecast", label: "Forecast", emoji: "🔭", enabled: false },
   { id: "family", label: "Family", emoji: "👨‍👩‍👧", enabled: false },
 ];
