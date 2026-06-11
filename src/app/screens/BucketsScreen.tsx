@@ -120,6 +120,7 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
               <input
                 type="number"
                 min={0}
+                step={0.01}
                 value={netIncomeDraft}
                 onChange={(e) => setNetIncomeDraft(e.target.value)}
                 className="w-full bg-muted rounded-lg pl-7 pr-3 py-3 text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow"
@@ -273,6 +274,7 @@ function BucketSection({
                     type="number"
                     min={0}
                     max={isPercent ? 100 : undefined}
+                    step={isPercent ? 0.1 : 0.01}
                     value={draftValues[bucket.id] ?? ""}
                     onChange={(e) => onValueChange(bucket.id, e.target.value)}
                     className={`w-20 bg-background rounded-lg py-2 text-xs text-foreground text-right font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow ${
@@ -430,6 +432,7 @@ function AddBucketDialog({
             <Input
               type="number"
               min={0}
+              step={kind === "expense" && allocationMode === "percent" ? 0.1 : 0.01}
               value={defaultValue}
               onChange={(e) => setDefaultValue(e.target.value)}
               placeholder={kind === "expense" && allocationMode === "percent" ? "10" : "500"}
@@ -530,6 +533,7 @@ function EditBucketDialog({
             <Input
               type="number"
               min={0}
+              step={bucket.kind === "expense" && allocationMode === "percent" ? 0.1 : 0.01}
               value={defaultValue}
               onChange={(e) => setDefaultValue(e.target.value)}
             />

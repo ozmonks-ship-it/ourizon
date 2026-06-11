@@ -621,6 +621,7 @@ function AssetRow({
           <input
             type="number"
             min="0"
+            step="0.01"
             value={draftValue}
             onChange={(e) => onDraftChange(e.target.value)}
             placeholder="0"
