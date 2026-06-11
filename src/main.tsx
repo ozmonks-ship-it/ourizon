@@ -1,8 +1,8 @@
 import { createRoot } from "react-dom/client";
-import { registerSW } from "virtual:pwa-register";
+import { initServiceWorker } from "./app/lib/serviceWorker";
 import App from "./app/App";
 import "./styles/index.css";
 
-registerSW({ immediate: true });
+initServiceWorker();
 
 createRoot(document.getElementById("root")!).render(<App />);
