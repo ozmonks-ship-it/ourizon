@@ -5,6 +5,7 @@ export interface BucketAllocationInput {
   kind: BucketKind;
   allocationMode: AllocationMode;
   value: number;
+  parentBucketId?: string | null;
 }
 
 export interface BucketAllocationResult {
@@ -26,9 +27,7 @@ function roundAmount(n: number): number {
 
 /**
  * Expense buckets with allocation_mode = 'amount' use their value directly.
- * Expense buckets with allocation_mode = 'percent':
- *   - If no amount-mode expense buckets exist → % of total income
- *   - If amount-mode expense buckets exist → % of (total income − sum of amount buckets)
+ * Expense buckets with allocation_mode = 'percent' use % of total income.
  */
 export function calculateExpenseAllocations(
   totalIncome: number,
@@ -39,10 +38,6 @@ export function calculateExpenseAllocations(
   const amountBuckets = expenseBuckets.filter((b) => b.allocationMode === "amount");
   const percentBuckets = expenseBuckets.filter((b) => b.allocationMode === "percent");
 
-  const amountTotal = amountBuckets.reduce((sum, b) => sum + b.value, 0);
-  const hasAmountBuckets = amountBuckets.length > 0;
-  const percentBase = hasAmountBuckets ? Math.max(0, totalIncome - amountTotal) : totalIncome;
-
   for (const bucket of amountBuckets) {
     const displayPercent = totalIncome > 0 ? (bucket.value / totalIncome) * 100 : null;
     results.set(bucket.id, {
@@ -52,10 +47,26 @@ export function calculateExpenseAllocations(
   }
 
   for (const bucket of percentBuckets) {
-    const resolvedAmount = roundAmount((percentBase * bucket.value) / 100);
+    const resolvedAmount = roundAmount((totalIncome * bucket.value) / 100);
     results.set(bucket.id, {
       resolvedAmount,
       displayPercent: bucket.value,
+    });
+  }
+
+  return results;
+}
+
+/** Items under a parent bucket are always fixed amounts. */
+export function calculateItemAllocations(
+  items: BucketAllocationInput[],
+): Map<string, BucketAllocationResult> {
+  const results = new Map<string, BucketAllocationResult>();
+
+  for (const item of items) {
+    results.set(item.id, {
+      resolvedAmount: roundAmount(item.value),
+      displayPercent: null,
     });
   }
 
@@ -70,7 +81,23 @@ export function calculateAllocationSummary(
   const incomeFromBuckets = incomeBuckets.reduce((sum, b) => sum + b.value, 0);
   const totalIncome = incomeBuckets.length > 0 ? incomeFromBuckets : fallbackNetIncome;
 
-  const expenseResults = calculateExpenseAllocations(totalIncome, expenseBuckets);
+  const topLevelExpense = expenseBuckets.filter((b) => !b.parentBucketId);
+  const expenseResults = calculateExpenseAllocations(totalIncome, topLevelExpense);
+
+  const subBucketsByParent = new Map<string, BucketAllocationInput[]>();
+  for (const bucket of expenseBuckets) {
+    if (!bucket.parentBucketId) continue;
+    const siblings = subBucketsByParent.get(bucket.parentBucketId) ?? [];
+    siblings.push(bucket);
+    subBucketsByParent.set(bucket.parentBucketId, siblings);
+  }
+
+  for (const [, items] of subBucketsByParent) {
+    const itemResults = calculateItemAllocations(items);
+    for (const [id, result] of itemResults) {
+      expenseResults.set(id, result);
+    }
+  }
 
   const byBucketId = new Map<string, BucketAllocationResult>();
 
@@ -86,7 +113,7 @@ export function calculateAllocationSummary(
     byBucketId.set(id, result);
   }
 
-  const totalExpenses = expenseBuckets.reduce(
+  const totalExpenses = topLevelExpense.reduce(
     (sum, b) => sum + (expenseResults.get(b.id)?.resolvedAmount ?? 0),
     0,
   );

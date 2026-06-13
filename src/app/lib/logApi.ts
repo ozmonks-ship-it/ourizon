@@ -54,6 +54,7 @@ export async function createBucket(
     allocationMode: AllocationMode;
     defaultValue: number;
     sortOrder: number;
+    parentBucketId?: string | null;
   },
 ): Promise<Bucket> {
   const supabase = createClient();
@@ -66,6 +67,7 @@ export async function createBucket(
       allocation_mode: input.allocationMode,
       default_value: input.defaultValue,
       sort_order: input.sortOrder,
+      parent_bucket_id: input.parentBucketId ?? null,
     })
     .select("*")
     .single();

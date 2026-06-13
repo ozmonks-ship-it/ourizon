@@ -132,6 +132,7 @@ export interface Database {
           allocation_mode: AllocationMode;
           default_value: number;
           sort_order: number;
+          parent_bucket_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -143,6 +144,7 @@ export interface Database {
           allocation_mode: AllocationMode;
           default_value?: number;
           sort_order?: number;
+          parent_bucket_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -154,6 +156,7 @@ export interface Database {
           allocation_mode?: AllocationMode;
           default_value?: number;
           sort_order?: number;
+          parent_bucket_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };

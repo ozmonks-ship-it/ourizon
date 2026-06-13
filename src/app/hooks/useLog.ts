@@ -41,6 +41,7 @@ interface UseLogResult {
   buckets: Bucket[];
   incomeBuckets: Bucket[];
   expenseBuckets: Bucket[];
+  subBucketsByParent: Map<string, Bucket[]>;
   monthLabel: string;
   year: number;
   month: number;
@@ -56,6 +57,7 @@ interface UseLogResult {
     kind: BucketKind;
     allocationMode: AllocationMode;
     defaultValue: number;
+    parentBucketId?: string | null;
   }) => Promise<void>;
   editBucket: (
     bucketId: string,
@@ -93,9 +95,22 @@ export function useLog(session: Session | null): UseLogResult {
     [buckets],
   );
   const expenseBuckets = useMemo(
-    () => buckets.filter((b) => b.kind === "expense"),
+    () => buckets.filter((b) => b.kind === "expense" && !b.parent_bucket_id),
     [buckets],
   );
+  const subBucketsByParent = useMemo(() => {
+    const map = new Map<string, Bucket[]>();
+    for (const bucket of buckets) {
+      if (bucket.kind !== "expense" || !bucket.parent_bucket_id) continue;
+      const siblings = map.get(bucket.parent_bucket_id) ?? [];
+      siblings.push(bucket);
+      map.set(bucket.parent_bucket_id, siblings);
+    }
+    for (const siblings of map.values()) {
+      siblings.sort((a, b) => a.sort_order - b.sort_order);
+    }
+    return map;
+  }, [buckets]);
   const hasIncomeBuckets = incomeBuckets.length > 0;
 
   const buildDraftFromData = useCallback(
@@ -165,19 +180,22 @@ export function useLog(session: Session | null): UseLogResult {
       value: parseDraftValue(draftValues[b.id] ?? ""),
     }));
 
-    const expense = expenseBuckets.map((b) => ({
-      id: b.id,
-      kind: b.kind,
-      allocationMode: b.allocation_mode,
-      value: parseDraftValue(draftValues[b.id] ?? ""),
-    }));
+    const expense = buckets
+      .filter((b) => b.kind === "expense")
+      .map((b) => ({
+        id: b.id,
+        kind: b.kind,
+        allocationMode: b.allocation_mode,
+        value: parseDraftValue(draftValues[b.id] ?? ""),
+        parentBucketId: b.parent_bucket_id,
+      }));
 
     return {
       income,
       expense,
       fallbackNetIncome: parseDraftValue(netIncomeDraft),
     };
-  }, [incomeBuckets, expenseBuckets, draftValues, netIncomeDraft]);
+  }, [incomeBuckets, buckets, draftValues, netIncomeDraft]);
 
   const summary = useMemo(
     () =>
@@ -205,6 +223,7 @@ export function useLog(session: Session | null): UseLogResult {
       kind: BucketKind;
       allocationMode: AllocationMode;
       defaultValue: number;
+      parentBucketId?: string | null;
     }) => {
       if (!budgetOwnerId) return;
 
@@ -212,14 +231,22 @@ export function useLog(session: Session | null): UseLogResult {
       setError(null);
 
       try {
+        const siblingBuckets = input.parentBucketId
+          ? buckets.filter((b) => b.parent_bucket_id === input.parentBucketId)
+          : buckets.filter((b) => !b.parent_bucket_id);
         const sortOrder =
-          buckets.length > 0 ? Math.max(...buckets.map((b) => b.sort_order)) + 1 : 1;
+          siblingBuckets.length > 0
+            ? Math.max(...siblingBuckets.map((b) => b.sort_order)) + 1
+            : buckets.length > 0
+              ? Math.max(...buckets.map((b) => b.sort_order)) + 1
+              : 1;
         await createBucket(budgetOwnerId, {
           name: input.name,
           kind: input.kind,
-          allocationMode: input.allocationMode,
+          allocationMode: input.parentBucketId ? "amount" : input.allocationMode,
           defaultValue: input.defaultValue,
           sortOrder,
+          parentBucketId: input.parentBucketId,
         });
         await refresh();
       } catch (err) {
@@ -317,6 +344,7 @@ export function useLog(session: Session | null): UseLogResult {
     buckets,
     incomeBuckets,
     expenseBuckets,
+    subBucketsByParent,
     monthLabel,
     year,
     month,

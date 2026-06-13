@@ -35,6 +35,7 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
     error,
     incomeBuckets,
     expenseBuckets,
+    subBucketsByParent,
     monthLabel,
     year,
     month,
@@ -53,6 +54,7 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
   } = useLog(session);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [addSubBucketParentId, setAddSubBucketParentId] = useState<string | null>(null);
   const [editingBucket, setEditingBucket] = useState<Bucket | null>(null);
 
   if (loading) {
@@ -146,18 +148,16 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
           />
         )}
 
-        <BucketSection
-          title="Expense buckets"
-          emoji="🪣"
+        <ExpenseBucketSection
           buckets={expenseBuckets}
+          subBucketsByParent={subBucketsByParent}
           draftValues={draftValues}
           summary={summary}
           onValueChange={setDraftValue}
           onEdit={setEditingBucket}
           onDelete={removeBucket}
+          onAddSubBucket={setAddSubBucketParentId}
           saving={saving}
-          showResolved
-          percentOfRemaining={expenseBuckets.some((b) => b.allocation_mode === "amount")}
         />
 
         <div className="border-t border-border px-5 py-4 space-y-2">
@@ -199,6 +199,181 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
           saving={saving}
         />
       )}
+
+      {addSubBucketParentId && (
+        <AddSubBucketDialog
+          parentId={addSubBucketParentId}
+          parentName={expenseBuckets.find((b) => b.id === addSubBucketParentId)?.name ?? "bucket"}
+          open={addSubBucketParentId !== null}
+          onOpenChange={(open) => !open && setAddSubBucketParentId(null)}
+          onAdd={addBucket}
+          saving={saving}
+        />
+      )}
+    </div>
+  );
+}
+
+function BucketRow({
+  bucket,
+  draftValues,
+  summary,
+  onValueChange,
+  onEdit,
+  onDelete,
+  saving,
+  showResolved = false,
+  isItem = false,
+}: {
+  bucket: Bucket;
+  draftValues: Record<string, string>;
+  summary: ReturnType<typeof import("../lib/bucketAllocation").calculateAllocationSummary>;
+  onValueChange: (bucketId: string, value: string) => void;
+  onEdit: (bucket: Bucket) => void;
+  onDelete: (bucketId: string) => Promise<void>;
+  saving: boolean;
+  showResolved?: boolean;
+  isItem?: boolean;
+}) {
+  const resolved = summary.byBucketId.get(bucket.id);
+  const isPercent = !isItem && bucket.allocation_mode === "percent";
+  const subtitle = isPercent
+    ? `${draftValues[bucket.id] || bucket.default_value}% of income`
+    : "Fixed amount";
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50 ${isItem ? "ml-4 border-l-2 border-border" : ""}`}
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate">{bucket.name}</p>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+        {showResolved && isPercent && resolved && (
+          <span className="text-xs text-muted-foreground tabular-nums w-16 text-right">
+            {fmt(resolved.resolvedAmount)}
+          </span>
+        )}
+
+        <div className="relative">
+          {!isPercent && (
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
+              $
+            </span>
+          )}
+          <input
+            type="number"
+            min={0}
+            max={isPercent ? 100 : undefined}
+            step={isPercent ? 0.1 : 0.01}
+            value={draftValues[bucket.id] ?? ""}
+            onChange={(e) => onValueChange(bucket.id, e.target.value)}
+            className={`w-20 bg-background rounded-lg py-2 text-xs text-foreground text-right font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow ${
+              isPercent ? "px-2 pr-6" : "pl-6 pr-2"
+            }`}
+          />
+          {isPercent && (
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
+              %
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onEdit(bucket)}
+          className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label={`Edit ${bucket.name}`}
+        >
+          <Pencil className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => void onDelete(bucket.id)}
+          className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+          aria-label={`Delete ${bucket.name}`}
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ExpenseBucketSection({
+  buckets,
+  subBucketsByParent,
+  draftValues,
+  summary,
+  onValueChange,
+  onEdit,
+  onDelete,
+  onAddSubBucket,
+  saving,
+}: {
+  buckets: Bucket[];
+  subBucketsByParent: Map<string, Bucket[]>;
+  draftValues: Record<string, string>;
+  summary: ReturnType<typeof import("../lib/bucketAllocation").calculateAllocationSummary>;
+  onValueChange: (bucketId: string, value: string) => void;
+  onEdit: (bucket: Bucket) => void;
+  onDelete: (bucketId: string) => Promise<void>;
+  onAddSubBucket: (parentId: string) => void;
+  saving: boolean;
+}) {
+  if (buckets.length === 0) return null;
+
+  return (
+    <div className="border-b border-border px-5 py-4 last:border-b-0">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-medium text-foreground">Expense buckets 🪣</p>
+      </div>
+      <div className="space-y-2">
+        {buckets.map((bucket) => {
+          const items = subBucketsByParent.get(bucket.id) ?? [];
+
+          return (
+            <div key={bucket.id} className="space-y-2">
+              <BucketRow
+                bucket={bucket}
+                draftValues={draftValues}
+                summary={summary}
+                onValueChange={onValueChange}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                saving={saving}
+                showResolved
+              />
+
+              {items.map((item) => (
+                <BucketRow
+                  key={item.id}
+                  bucket={item}
+                  draftValues={draftValues}
+                  summary={summary}
+                  onValueChange={onValueChange}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  saving={saving}
+                  isItem
+                />
+              ))}
+
+              <button
+                type="button"
+                onClick={() => onAddSubBucket(bucket.id)}
+                className="ml-4 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <PlusCircle className="size-3" />
+                Add item
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -214,7 +389,6 @@ function BucketSection({
   onDelete,
   saving,
   showResolved = false,
-  percentOfRemaining = false,
 }: {
   title: string;
   emoji: string;
@@ -226,7 +400,6 @@ function BucketSection({
   onDelete: (bucketId: string) => Promise<void>;
   saving: boolean;
   showResolved?: boolean;
-  percentOfRemaining?: boolean;
 }) {
   if (buckets.length === 0) return null;
 
@@ -242,9 +415,7 @@ function BucketSection({
           const resolved = summary.byBucketId.get(bucket.id);
           const isPercent = bucket.allocation_mode === "percent";
           const subtitle = isPercent
-            ? `${draftValues[bucket.id] || bucket.default_value}% of ${
-                percentOfRemaining ? "remaining" : "income"
-              }`
+            ? `${draftValues[bucket.id] || bucket.default_value}% of income`
             : "Fixed amount";
 
           return (
@@ -328,6 +499,7 @@ function AddBucketDialog({
     kind: BucketKind;
     allocationMode: AllocationMode;
     defaultValue: number;
+    parentBucketId?: string | null;
   }) => Promise<void>;
   saving: boolean;
   triggerLabel: string;
@@ -453,6 +625,106 @@ function AddBucketDialog({
   );
 }
 
+function AddSubBucketDialog({
+  parentId,
+  parentName,
+  open,
+  onOpenChange,
+  onAdd,
+  saving,
+}: {
+  parentId: string;
+  parentName: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAdd: (input: {
+    name: string;
+    kind: BucketKind;
+    allocationMode: AllocationMode;
+    defaultValue: number;
+    parentBucketId?: string | null;
+  }) => Promise<void>;
+  saving: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [defaultValue, setDefaultValue] = useState("");
+
+  const reset = () => {
+    setName("");
+    setDefaultValue("");
+  };
+
+  const handleSubmit = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    const value = defaultValue.trim() === "" ? 0 : parseFloat(defaultValue);
+    if (Number.isNaN(value) || value < 0) return;
+
+    await onAdd({
+      name: trimmed,
+      kind: "expense",
+      allocationMode: "amount",
+      defaultValue: value,
+      parentBucketId: parentId,
+    });
+    reset();
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) reset();
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-medium">Add item</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground -mt-1">
+          Under {parentName}
+        </p>
+        <div className="space-y-3 py-2">
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Name</label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Groceries 🥬"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+              Default amount
+            </label>
+            <Input
+              type="number"
+              min={0}
+              step={0.01}
+              value={defaultValue}
+              onChange={(e) => setDefaultValue(e.target.value)}
+              placeholder="500"
+            />
+          </div>
+
+          <button
+            type="button"
+            disabled={saving || !name.trim()}
+            onClick={() => void handleSubmit()}
+            className="w-full py-2.5 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 mt-2 disabled:opacity-50"
+          >
+            {saving ? "Adding…" : "Add item"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EditBucketDialog({
   bucket,
   open,
@@ -475,6 +747,8 @@ function EditBucketDialog({
   const [allocationMode, setAllocationMode] = useState<AllocationMode>(bucket.allocation_mode);
   const [defaultValue, setDefaultValue] = useState(String(bucket.default_value));
 
+  const isItem = bucket.parent_bucket_id !== null;
+
   const handleSave = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -484,7 +758,8 @@ function EditBucketDialog({
 
     await onSave(bucket.id, {
       name: trimmed,
-      allocationMode: bucket.kind === "income" ? "amount" : allocationMode,
+      allocationMode:
+        bucket.kind === "income" || isItem ? "amount" : allocationMode,
       defaultValue: value,
     });
     onOpenChange(false);
@@ -499,7 +774,7 @@ function EditBucketDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-medium">Edit bucket</DialogTitle>
+          <DialogTitle className="font-medium">{isItem ? "Edit item" : "Edit bucket"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <div>
@@ -507,7 +782,7 @@ function EditBucketDialog({
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
 
-          {bucket.kind === "expense" && (
+          {bucket.kind === "expense" && !isItem && (
             <div>
               <label className="text-xs text-muted-foreground mb-1.5 block">Allocation</label>
               <Select
@@ -528,12 +803,16 @@ function EditBucketDialog({
           <div>
             <label className="text-xs text-muted-foreground mb-1.5 block">
               Default{" "}
-              {bucket.kind === "expense" && allocationMode === "percent" ? "percentage" : "amount"}
+              {bucket.kind === "expense" && !isItem && allocationMode === "percent"
+                ? "percentage"
+                : "amount"}
             </label>
             <Input
               type="number"
               min={0}
-              step={bucket.kind === "expense" && allocationMode === "percent" ? 0.1 : 0.01}
+              step={
+                bucket.kind === "expense" && !isItem && allocationMode === "percent" ? 0.1 : 0.01
+              }
               value={defaultValue}
               onChange={(e) => setDefaultValue(e.target.value)}
             />
