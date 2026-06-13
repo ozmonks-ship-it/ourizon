@@ -11,6 +11,8 @@ export interface BucketAllocationInput {
 export interface BucketAllocationResult {
   resolvedAmount: number;
   displayPercent: number | null;
+  /** Parent bucket amount minus sub-bucket totals; set only when sub-buckets exist. */
+  remainingAmount?: number;
 }
 
 export interface AllocationSummary {
@@ -92,11 +94,23 @@ export function calculateAllocationSummary(
     subBucketsByParent.set(bucket.parentBucketId, siblings);
   }
 
-  for (const [, items] of subBucketsByParent) {
+  for (const [parentId, items] of subBucketsByParent) {
     const itemResults = calculateItemAllocations(items);
     for (const [id, result] of itemResults) {
       expenseResults.set(id, result);
     }
+
+    const parentResult = expenseResults.get(parentId);
+    if (!parentResult) continue;
+
+    const itemsTotal = items.reduce(
+      (sum, item) => sum + (expenseResults.get(item.id)?.resolvedAmount ?? 0),
+      0,
+    );
+    expenseResults.set(parentId, {
+      ...parentResult,
+      remainingAmount: roundAmount(parentResult.resolvedAmount - itemsTotal),
+    });
   }
 
   const byBucketId = new Map<string, BucketAllocationResult>();

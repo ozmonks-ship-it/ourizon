@@ -237,9 +237,14 @@ function BucketRow({
 }) {
   const resolved = summary.byBucketId.get(bucket.id);
   const isPercent = !isItem && bucket.allocation_mode === "percent";
-  const subtitle = isPercent
+  const allocationLabel = isPercent
     ? `${draftValues[bucket.id] || bucket.default_value}% of income`
     : "Fixed amount";
+  const remainingLabel =
+    !isItem && resolved?.remainingAmount !== undefined
+      ? `${fmt(resolved.remainingAmount)} remaining`
+      : null;
+  const subtitle = remainingLabel ? `${allocationLabel} · ${remainingLabel}` : allocationLabel;
 
   return (
     <div
