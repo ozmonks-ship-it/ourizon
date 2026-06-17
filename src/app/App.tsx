@@ -4,6 +4,7 @@ import { AppLayout, type NavScreen } from "./components/AppLayout";
 import { AssetsScreen } from "./screens/AssetsScreen";
 import { BucketsScreen } from "./screens/BucketsScreen";
 import { AuthCallbackScreen } from "./screens/AuthCallbackScreen";
+import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
 import { PwaInstallBanner } from "./components/PwaInstallBanner";
@@ -14,7 +15,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [bootstrapped, setBootstrapped] = useState(false);
-  const [screen, setScreen] = useState<NavScreen>("assets");
+  const [screen, setScreen] = useState<NavScreen>("dashboard");
   const isAuthCallback = window.location.pathname === "/auth/callback";
 
   useEffect(() => {
@@ -95,6 +96,7 @@ export default function App() {
     <div className="dark">
       <div className="min-h-screen bg-background text-foreground">
         <AppLayout session={session} screen={screen} onNavigate={setScreen}>
+          {screen === "dashboard" && <HomeScreen session={session} />}
           {screen === "assets" && <AssetsScreen session={session} />}
           {screen === "monthly" && <BucketsScreen session={session} />}
         </AppLayout>

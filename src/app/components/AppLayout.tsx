@@ -5,7 +5,7 @@ import { CollaboratorsMenu } from "./CollaboratorsMenu";
 export type NavScreen = "dashboard" | "assets" | "monthly" | "forecast" | "family";
 
 const NAV: { id: NavScreen; label: string; emoji: string; enabled: boolean }[] = [
-  { id: "dashboard", label: "Home", emoji: "🏠", enabled: false },
+  { id: "dashboard", label: "Home", emoji: "🏠", enabled: true },
   { id: "assets", label: "Assets", emoji: "💰", enabled: true },
   { id: "monthly", label: "Buckets", emoji: "🪣", enabled: true },
   { id: "forecast", label: "Forecast", emoji: "🔭", enabled: false },
