@@ -4,7 +4,6 @@ import type { AssetGroupId, AssetWithBalance, NetWorthPoint } from "@/lib/supaba
 import {
   buildAssetsWithBalances,
   buildNetWorthHistory,
-  buildSparklineData,
   createAsset,
   deleteAsset,
   deleteBalanceSnapshot,
@@ -26,7 +25,6 @@ interface UseAssetsResult {
   totalNetWorth: number;
   hasAssets: boolean;
   hasSnapshots: boolean;
-  getSparkline: (assetId: string) => number[];
   getSnapshot: (snapshotId: string) => SnapshotWithEntries | undefined;
   getSnapshotBalancesForEdit: (snapshotId: string) => Record<string, number>;
   addAsset: (input: { name: string; institution: string; groupId: AssetGroupId }) => Promise<void>;
@@ -89,11 +87,6 @@ export function useAssets(session: Session | null): UseAssetsResult {
     if (netWorthHistory.length === 0) return 0;
     return netWorthHistory[netWorthHistory.length - 1].value;
   }, [netWorthHistory]);
-
-  const getSparkline = useCallback(
-    (assetId: string) => buildSparklineData(assetId, snapshots),
-    [snapshots],
-  );
 
   const getSnapshot = useCallback(
     (snapshotId: string) => snapshots.find((snapshot) => snapshot.id === snapshotId),
@@ -216,7 +209,6 @@ export function useAssets(session: Session | null): UseAssetsResult {
     totalNetWorth,
     hasAssets: assets.length > 0,
     hasSnapshots: netWorthHistory.length > 0,
-    getSparkline,
     getSnapshot,
     getSnapshotBalancesForEdit,
     addAsset,

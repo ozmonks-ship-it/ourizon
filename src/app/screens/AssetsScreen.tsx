@@ -29,7 +29,6 @@ import {
 import { ASSET_GROUPS } from "../data/assetGroups";
 import { useAssets } from "../hooks/useAssets";
 import { fmt, fmtK, fmtSnapshotDate } from "../lib/format";
-import { Sparkline } from "../components/Sparkline";
 import type { AssetGroupId, AssetWithBalance, NetWorthPoint } from "@/lib/supabase/database.types";
 
 interface AssetsScreenProps {
@@ -46,7 +45,6 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
     totalNetWorth,
     hasAssets,
     hasSnapshots,
-    getSparkline,
     addAsset,
     removeAsset,
     saveBalances,
@@ -357,7 +355,6 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
                         onDraftChange={(value) =>
                           setDraftBalances((prev) => ({ ...prev, [asset.id]: value }))
                         }
-                        sparkline={getSparkline(asset.id)}
                         showBalance={hasSnapshots || editingBalances}
                         onDelete={() => void handleDeleteAsset(asset.id)}
                         saving={saving}
@@ -591,7 +588,6 @@ function AssetRow({
   editing,
   draftValue,
   onDraftChange,
-  sparkline,
   showBalance,
   onDelete,
   saving,
@@ -600,7 +596,6 @@ function AssetRow({
   editing: boolean;
   draftValue: string;
   onDraftChange: (value: string) => void;
-  sparkline: number[];
   showBalance: boolean;
   onDelete: () => void;
   saving: boolean;
@@ -611,11 +606,6 @@ function AssetRow({
         <p className="text-sm font-medium text-foreground">{asset.name}</p>
         <p className="text-xs text-muted-foreground mt-0.5">{asset.institution}</p>
       </div>
-      {sparkline.length >= 2 && (
-        <div className="w-16 shrink-0">
-          <Sparkline data={sparkline} id={asset.id} />
-        </div>
-      )}
       <div className="shrink-0 text-right">
         {editing ? (
           <input

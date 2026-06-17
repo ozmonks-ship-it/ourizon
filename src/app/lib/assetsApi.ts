@@ -84,18 +84,6 @@ export function getSnapshotBalances(
   return balances;
 }
 
-export function buildSparklineData(
-  assetId: string,
-  snapshots: SnapshotWithEntries[],
-): number[] {
-  return snapshots
-    .map((snapshot) => {
-      const entry = snapshot.balance_snapshot_entries.find((row) => row.asset_id === assetId);
-      return entry ? Number(entry.balance) : null;
-    })
-    .filter((value): value is number => value !== null);
-}
-
 export async function createAsset(
   budgetOwnerId: string,
   input: { name: string; institution: string; groupId: AssetGroupId },
