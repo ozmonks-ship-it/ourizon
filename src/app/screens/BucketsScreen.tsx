@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { CalendarDays, Pencil, PlusCircle, Trash2 } from "lucide-react";
 import {
@@ -28,10 +28,14 @@ interface BucketsScreenProps {
   session: Session;
 }
 
+const DIALOG_CLOSE_GUARD_MS = 400;
+
 export function BucketsScreen({ session }: BucketsScreenProps) {
   const {
     loading,
     saving,
+    savingBucket,
+    savingLog,
     error,
     incomeBuckets,
     expenseBuckets,
@@ -56,6 +60,31 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
   const [addOpen, setAddOpen] = useState(false);
   const [addSubBucketParentId, setAddSubBucketParentId] = useState<string | null>(null);
   const [editingBucket, setEditingBucket] = useState<Bucket | null>(null);
+  const blockMonthlySaveRef = useRef(false);
+
+  const dialogOpen = addOpen || editingBucket !== null || addSubBucketParentId !== null;
+
+  const guardMonthlySave = useCallback(() => {
+    blockMonthlySaveRef.current = true;
+    window.setTimeout(() => {
+      blockMonthlySaveRef.current = false;
+    }, DIALOG_CLOSE_GUARD_MS);
+  }, []);
+
+  const closeEditDialog = useCallback(() => {
+    guardMonthlySave();
+    setEditingBucket(null);
+  }, [guardMonthlySave]);
+
+  const closeAddSubBucketDialog = useCallback(() => {
+    guardMonthlySave();
+    setAddSubBucketParentId(null);
+  }, [guardMonthlySave]);
+
+  const handleSaveMonthlyLog = useCallback(() => {
+    if (blockMonthlySaveRef.current || dialogOpen) return;
+    void saveBuckets();
+  }, [dialogOpen, saveBuckets]);
 
   if (loading) {
     return <p className="text-muted-foreground text-sm">Loading…</p>;
@@ -86,9 +115,12 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
 
         <AddBucketDialog
           open={addOpen}
-          onOpenChange={setAddOpen}
+          onOpenChange={(open) => {
+            if (!open) guardMonthlySave();
+            setAddOpen(open);
+          }}
           onAdd={addBucket}
-          saving={saving}
+          saving={savingBucket}
           triggerLabel="Add"
         />
       </div>
@@ -182,21 +214,21 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
 
       <button
         type="button"
-        disabled={saving}
-        onClick={() => void saveBuckets()}
+        disabled={savingLog || dialogOpen}
+        onClick={handleSaveMonthlyLog}
         className="w-full bg-foreground text-background font-medium rounded-xl py-3.5 hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50"
       >
-        {saving ? "Saving…" : `Save ${monthLabel}`}
+        {savingLog ? "Saving…" : `Save ${monthLabel}`}
       </button>
 
       {editingBucket && (
         <EditBucketDialog
           bucket={editingBucket}
           open={editingBucket !== null}
-          onOpenChange={(open) => !open && setEditingBucket(null)}
+          onOpenChange={(open) => !open && closeEditDialog()}
           onSave={editBucket}
           onDelete={removeBucket}
-          saving={saving}
+          saving={savingBucket}
         />
       )}
 
@@ -205,9 +237,9 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
           parentId={addSubBucketParentId}
           parentName={expenseBuckets.find((b) => b.id === addSubBucketParentId)?.name ?? "bucket"}
           open={addSubBucketParentId !== null}
-          onOpenChange={(open) => !open && setAddSubBucketParentId(null)}
+          onOpenChange={(open) => !open && closeAddSubBucketDialog()}
           onAdd={addBucket}
-          saving={saving}
+          saving={savingBucket}
         />
       )}
     </div>
@@ -767,17 +799,20 @@ function EditBucketDialog({
         bucket.kind === "income" || isItem ? "amount" : allocationMode,
       defaultValue: value,
     });
-    onOpenChange(false);
+    window.setTimeout(() => onOpenChange(false), 0);
   };
 
   const handleDelete = async () => {
     await onDelete(bucket.id);
-    onOpenChange(false);
+    window.setTimeout(() => onOpenChange(false), 0);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="font-medium">{isItem ? "Edit item" : "Edit bucket"}</DialogTitle>
         </DialogHeader>
@@ -838,7 +873,7 @@ function EditBucketDialog({
               onClick={() => void handleSave()}
               className="flex-1 bg-foreground text-background font-medium rounded-lg py-2.5 text-sm disabled:opacity-50"
             >
-              Save
+              {saving ? "Saving…" : "Save bucket"}
             </button>
           </div>
         </div>
