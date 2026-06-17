@@ -106,6 +106,7 @@ export async function saveMonthlyLog(
   year: number,
   month: number,
   netIncome: number,
+  savingAmount: number,
   entries: { bucket_id: string; input_value: number; resolved_amount: number }[],
 ): Promise<string> {
   const supabase = createClient();
@@ -113,6 +114,7 @@ export async function saveMonthlyLog(
     p_year: year,
     p_month: month,
     p_net_income: netIncome,
+    p_saving_amount: savingAmount,
     p_entries: entries,
   });
 

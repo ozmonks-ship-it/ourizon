@@ -168,6 +168,7 @@ export interface Database {
           year: number;
           month: number;
           net_income: number;
+          saving_amount: number;
           created_at: string;
           updated_at: string;
         };
@@ -177,6 +178,7 @@ export interface Database {
           year: number;
           month: number;
           net_income?: number;
+          saving_amount?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -186,6 +188,7 @@ export interface Database {
           year?: number;
           month?: number;
           net_income?: number;
+          saving_amount?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -237,6 +240,7 @@ export interface Database {
           p_year: number;
           p_month: number;
           p_net_income: number;
+          p_saving_amount: number;
           p_entries: { bucket_id: string; input_value: number; resolved_amount: number }[];
         };
         Returns: string;
