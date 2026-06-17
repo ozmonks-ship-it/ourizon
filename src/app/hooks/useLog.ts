@@ -45,6 +45,8 @@ function parseDraftValue(raw: string): number {
 interface UseLogResult {
   loading: boolean;
   saving: boolean;
+  savingBucket: boolean;
+  savingLog: boolean;
   error: string | null;
   buckets: Bucket[];
   incomeBuckets: Bucket[];
@@ -90,7 +92,9 @@ export function useLog(session: Session | null): UseLogResult {
   });
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingBucket, setSavingBucket] = useState(false);
+  const [savingLog, setSavingLog] = useState(false);
+  const saving = savingBucket || savingLog;
   const [error, setError] = useState<string | null>(null);
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
@@ -255,7 +259,7 @@ export function useLog(session: Session | null): UseLogResult {
     }) => {
       if (!budgetOwnerId) return;
 
-      setSaving(true);
+      setSavingBucket(true);
       setError(null);
 
       try {
@@ -268,7 +272,7 @@ export function useLog(session: Session | null): UseLogResult {
             : buckets.length > 0
               ? Math.max(...buckets.map((b) => b.sort_order)) + 1
               : 1;
-        await createBucket(budgetOwnerId, {
+        const created = await createBucket(budgetOwnerId, {
           name: input.name,
           kind: input.kind,
           allocationMode: input.parentBucketId ? "amount" : input.allocationMode,
@@ -276,15 +280,21 @@ export function useLog(session: Session | null): UseLogResult {
           sortOrder,
           parentBucketId: input.parentBucketId,
         });
-        await refresh({ preserveDrafts: true });
+        setBuckets((prev) =>
+          [...prev, created].sort((a, b) => a.sort_order - b.sort_order),
+        );
+        setDraftValues((prev) => ({
+          ...prev,
+          [created.id]: created.default_value === 0 ? "" : String(created.default_value),
+        }));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to add bucket");
         throw err;
       } finally {
-        setSaving(false);
+        setSavingBucket(false);
       }
     },
-    [budgetOwnerId, buckets, refresh],
+    [budgetOwnerId, buckets],
   );
 
   const editBucket = useCallback(
@@ -296,7 +306,7 @@ export function useLog(session: Session | null): UseLogResult {
         defaultValue?: number;
       },
     ) => {
-      setSaving(true);
+      setSavingBucket(true);
       setError(null);
 
       try {
@@ -305,42 +315,63 @@ export function useLog(session: Session | null): UseLogResult {
           allocationMode: input.allocationMode,
           defaultValue: input.defaultValue,
         });
-        await refresh({ preserveDrafts: true });
+        setBuckets((prev) =>
+          prev.map((bucket) => {
+            if (bucket.id !== bucketId) return bucket;
+            return {
+              ...bucket,
+              ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+              ...(input.allocationMode !== undefined
+                ? { allocation_mode: input.allocationMode }
+                : {}),
+              ...(input.defaultValue !== undefined ? { default_value: input.defaultValue } : {}),
+            };
+          }),
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update bucket");
         throw err;
       } finally {
-        setSaving(false);
+        setSavingBucket(false);
       }
     },
-    [refresh],
+    [],
   );
 
-  const removeBucket = useCallback(
-    async (bucketId: string) => {
-      setSaving(true);
-      setError(null);
+  const removeBucket = useCallback(async (bucketId: string) => {
+    setSavingBucket(true);
+    setError(null);
 
-      try {
-        await deleteBucket(bucketId);
-        await refresh({ preserveDrafts: true });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete bucket");
-        throw err;
-      } finally {
-        setSaving(false);
-      }
-    },
-    [refresh],
-  );
+    try {
+      await deleteBucket(bucketId);
+      const childIds = new Set(
+        buckets.filter((bucket) => bucket.parent_bucket_id === bucketId).map((bucket) => bucket.id),
+      );
+      const removedIds = new Set([bucketId, ...childIds]);
+      setBuckets((prev) => prev.filter((bucket) => !removedIds.has(bucket.id)));
+      setDraftValues((prev) => {
+        const next = { ...prev };
+        for (const id of removedIds) {
+          delete next[id];
+        }
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete bucket");
+      throw err;
+    } finally {
+      setSavingBucket(false);
+    }
+  }, [buckets]);
 
   const setSelectedPeriod = useCallback((nextYear: number, nextMonth: number) => {
+    setLoading(true);
     setSelectedPeriodState({ year: nextYear, month: nextMonth });
     setSaved(false);
   }, []);
 
   const saveBuckets = useCallback(async () => {
-    setSaving(true);
+    setSavingLog(true);
     setError(null);
 
     try {
@@ -354,7 +385,7 @@ export function useLog(session: Session | null): UseLogResult {
         };
       });
 
-      await saveMonthlyLog(year, month, summary.totalIncome, entries);
+      await saveMonthlyLog(year, month, summary.totalIncome, summary.saving, entries);
       if (userId) {
         clearDraftSnapshot(userId, year, month);
       }
@@ -364,13 +395,15 @@ export function useLog(session: Session | null): UseLogResult {
       setError(err instanceof Error ? err.message : "Failed to save log");
       throw err;
     } finally {
-      setSaving(false);
+      setSavingLog(false);
     }
   }, [buckets, draftValues, summary, year, month, userId]);
 
   return {
     loading,
     saving,
+    savingBucket,
+    savingLog,
     error,
     buckets,
     incomeBuckets,
