@@ -3,6 +3,14 @@ import type { Session } from "@supabase/supabase-js";
 import type { AllocationMode, Bucket, BucketKind } from "@/lib/supabase/database.types";
 import { calculateAllocationSummary, type BucketAllocationInput } from "../lib/bucketAllocation";
 import {
+  buildDraftFromServer,
+  clearDraftSnapshot,
+  loadDraftSnapshot,
+  mergeDraftWithBuckets,
+  restoreDraftSnapshot,
+  saveDraftSnapshot,
+} from "../lib/logDraftStorage";
+import {
   createBucket,
   deleteBucket,
   fetchBuckets,
@@ -112,61 +120,81 @@ export function useLog(session: Session | null): UseLogResult {
     return map;
   }, [buckets]);
   const hasIncomeBuckets = incomeBuckets.length > 0;
+  const userId = session?.user.id;
 
-  const buildDraftFromData = useCallback(
-    (bucketRows: Bucket[], netIncome: number, entries: Map<string, { input_value: number }>) => {
-      const nextDraft: Record<string, string> = {};
-      for (const bucket of bucketRows) {
-        const entry = entries.get(bucket.id);
-        const value = entry?.input_value ?? bucket.default_value;
-        nextDraft[bucket.id] = value === 0 ? "" : String(value);
-      }
-      setDraftValues(nextDraft);
-      setNetIncomeDraft(netIncome === 0 ? "" : String(netIncome));
+  const applyDraftSnapshot = useCallback(
+    (snapshot: { draftValues: Record<string, string>; netIncomeDraft: string }) => {
+      setDraftValues(snapshot.draftValues);
+      setNetIncomeDraft(snapshot.netIncomeDraft);
     },
     [],
   );
 
-  const refresh = useCallback(async () => {
-    if (!session?.user.id) {
-      setBuckets([]);
-      setDraftValues({});
-      setNetIncomeDraft("");
-      setBudgetOwnerId(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const ownerId = await resolveBudgetOwnerId(session.user.id);
-      setBudgetOwnerId(ownerId);
-
-      let bucketRows = await fetchBuckets(ownerId);
-      if (bucketRows.length === 0) {
-        await seedDefaultBuckets();
-        bucketRows = await fetchBuckets(ownerId);
+  const refresh = useCallback(
+    async (options?: { preserveDrafts?: boolean }) => {
+      if (!userId) {
+        setBuckets([]);
+        setDraftValues({});
+        setNetIncomeDraft("");
+        setBudgetOwnerId(null);
+        setLoading(false);
+        return;
       }
 
-      setBuckets(bucketRows);
+      if (!options?.preserveDrafts) {
+        setLoading(true);
+      }
+      setError(null);
 
-      const log = await fetchMonthlyLog(ownerId, year, month);
-      const entryMap = new Map(
-        (log?.monthly_log_entries ?? []).map((e) => [e.bucket_id, e]),
-      );
-      buildDraftFromData(bucketRows, log?.net_income ?? 0, entryMap);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load log");
-    } finally {
-      setLoading(false);
-    }
-  }, [session?.user.id, year, month, buildDraftFromData]);
+      try {
+        const ownerId = await resolveBudgetOwnerId(userId);
+        setBudgetOwnerId(ownerId);
+
+        let bucketRows = await fetchBuckets(ownerId);
+        if (bucketRows.length === 0) {
+          await seedDefaultBuckets();
+          bucketRows = await fetchBuckets(ownerId);
+        }
+
+        setBuckets(bucketRows);
+
+        if (options?.preserveDrafts) {
+          const log = await fetchMonthlyLog(ownerId, year, month);
+          const entryMap = new Map(
+            (log?.monthly_log_entries ?? []).map((e) => [e.bucket_id, e]),
+          );
+          setDraftValues((prev) => mergeDraftWithBuckets(prev, bucketRows, entryMap));
+          return;
+        }
+
+        const log = await fetchMonthlyLog(ownerId, year, month);
+        const entryMap = new Map(
+          (log?.monthly_log_entries ?? []).map((e) => [e.bucket_id, e]),
+        );
+        const fromServer = buildDraftFromServer(bucketRows, log?.net_income ?? 0, entryMap);
+        const stored = loadDraftSnapshot(userId, year, month);
+        applyDraftSnapshot(
+          stored ? restoreDraftSnapshot(fromServer, stored, bucketRows) : fromServer,
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load log");
+      } finally {
+        if (!options?.preserveDrafts) {
+          setLoading(false);
+        }
+      }
+    },
+    [userId, year, month, applyDraftSnapshot],
+  );
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!userId || loading) return;
+    saveDraftSnapshot(userId, year, month, { draftValues, netIncomeDraft });
+  }, [userId, year, month, draftValues, netIncomeDraft, loading]);
 
   const allocationInputs = useMemo((): {
     income: BucketAllocationInput[];
@@ -248,7 +276,7 @@ export function useLog(session: Session | null): UseLogResult {
           sortOrder,
           parentBucketId: input.parentBucketId,
         });
-        await refresh();
+        await refresh({ preserveDrafts: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to add bucket");
         throw err;
@@ -277,7 +305,7 @@ export function useLog(session: Session | null): UseLogResult {
           allocationMode: input.allocationMode,
           defaultValue: input.defaultValue,
         });
-        await refresh();
+        await refresh({ preserveDrafts: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update bucket");
         throw err;
@@ -295,7 +323,7 @@ export function useLog(session: Session | null): UseLogResult {
 
       try {
         await deleteBucket(bucketId);
-        await refresh();
+        await refresh({ preserveDrafts: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to delete bucket");
         throw err;
@@ -327,6 +355,9 @@ export function useLog(session: Session | null): UseLogResult {
       });
 
       await saveMonthlyLog(year, month, summary.totalIncome, entries);
+      if (userId) {
+        clearDraftSnapshot(userId, year, month);
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 3500);
     } catch (err) {
@@ -335,7 +366,7 @@ export function useLog(session: Session | null): UseLogResult {
     } finally {
       setSaving(false);
     }
-  }, [buckets, draftValues, summary, year, month]);
+  }, [buckets, draftValues, summary, year, month, userId]);
 
   return {
     loading,
