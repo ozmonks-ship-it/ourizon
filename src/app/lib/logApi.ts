@@ -28,6 +28,21 @@ export async function fetchBuckets(budgetOwnerId: string): Promise<Bucket[]> {
   return data ?? [];
 }
 
+export async function fetchMonthlyLogs(
+  budgetOwnerId: string,
+): Promise<Pick<MonthlyLog, "year" | "month" | "saving_amount">[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("monthly_logs")
+    .select("year, month, saving_amount")
+    .eq("user_id", budgetOwnerId)
+    .order("year", { ascending: true })
+    .order("month", { ascending: true });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function fetchMonthlyLog(
   budgetOwnerId: string,
   year: number,

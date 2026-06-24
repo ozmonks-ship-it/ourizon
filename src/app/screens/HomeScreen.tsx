@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { ForecastCard } from "../components/ForecastCard";
 import { useAssets } from "../hooks/useAssets";
-import { useLog } from "../hooks/useLog";
+import { currentPeriod, useLog } from "../hooks/useLog";
+import { useForecast } from "../hooks/useForecast";
 import { ASSET_GROUPS } from "../data/assetGroups";
 import { fmt, fmtK } from "../lib/format";
 import { firstNameFromUser, timeOfDayGreeting } from "../lib/userDisplay";
@@ -13,6 +15,12 @@ interface HomeScreenProps {
 export function HomeScreen({ session }: HomeScreenProps) {
   const { loading: assetsLoading, assets, totalNetWorth, hasSnapshots } = useAssets(session);
   const { loading: bucketsLoading, expenseBuckets, summary, error: bucketsError } = useLog(session);
+  const {
+    loading: forecastLoading,
+    hasSnapshots: forecastReady,
+    forecastData,
+  } = useForecast(session);
+  const { year: todayYear } = currentPeriod();
 
   const assetClassTotals = useMemo(() => {
     return ASSET_GROUPS.map((group) => {
@@ -59,9 +67,11 @@ export function HomeScreen({ session }: HomeScreenProps) {
         />
       </div>
 
-      <ComingSoonCard
-        title="Forecast 🔭"
-        subtitle="Forecast chart and assumptions are coming soon."
+      <ForecastCard
+        loading={forecastLoading}
+        hasSnapshots={forecastReady}
+        forecastData={forecastData}
+        todayYear={String(todayYear)}
       />
 
       <div>
