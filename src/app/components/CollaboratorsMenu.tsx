@@ -27,7 +27,7 @@ export function MemberAvatar({
   member: BudgetMember;
   size?: "sm" | "md";
 }) {
-  const sizeClass = size === "sm" ? "w-7 h-7 text-[10px]" : "w-10 h-10 text-sm";
+  const sizeClass = size === "sm" ? "w-7 h-7 text-xs" : "w-10 h-10 text-sm";
 
   if (member.avatarUrl) {
     return (
@@ -158,9 +158,9 @@ export function CollaboratorsMenu({ session }: { session: Session }) {
                         onClick={() => void remove(member.inviteId!)}
                         disabled={saving}
                         className="w-7 h-7 rounded-md bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                        title="Remove collaborator"
+                        aria-label={`Remove ${member.displayName ?? member.email}`}
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={13} aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -191,9 +191,9 @@ export function CollaboratorsMenu({ session }: { session: Session }) {
                         onClick={() => void remove(invite.inviteId!)}
                         disabled={saving}
                         className="w-7 h-7 rounded-md bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                        title="Cancel invite"
+                        aria-label={`Cancel invite for ${invite.email}`}
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={13} aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -230,6 +230,8 @@ export function CollaboratorsMenu({ session }: { session: Session }) {
                   <Input
                     id="invite-email"
                     type="email"
+                    inputMode="email"
+                    autoComplete="email"
                     placeholder="their@email.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}

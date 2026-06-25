@@ -534,30 +534,36 @@ function AddAssetDialog({
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Asset Name</label>
+            <label htmlFor="asset-name" className="block text-xs font-medium text-muted-foreground mb-1.5">
+              Asset Name
+            </label>
             <Input
+              id="asset-name"
               placeholder="Investment Property - Sydney"
               value={newAsset.name}
               onChange={(e) => setNewAsset({ ...newAsset, name: e.target.value })}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+            <label htmlFor="asset-institution" className="block text-xs font-medium text-muted-foreground mb-1.5">
               Institution / Provider
             </label>
             <Input
+              id="asset-institution"
               placeholder="Ray White, Self-managed"
               value={newAsset.institution}
               onChange={(e) => setNewAsset({ ...newAsset, institution: e.target.value })}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Asset Type</label>
+            <label htmlFor="asset-type" className="block text-xs font-medium text-muted-foreground mb-1.5">
+              Asset Type
+            </label>
             <Select
               value={newAsset.groupId}
               onValueChange={(val) => setNewAsset({ ...newAsset, groupId: val as AssetGroupId })}
             >
-              <SelectTrigger>
+              <SelectTrigger id="asset-type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -600,6 +606,8 @@ function AssetRow({
   onDelete: () => void;
   saving: boolean;
 }) {
+  const balanceInputId = `asset-balance-${asset.id}`;
+
   return (
     <div className="px-4 py-3 flex items-center gap-3">
       <div className="flex-1 min-w-0">
@@ -609,13 +617,16 @@ function AssetRow({
       <div className="shrink-0 text-right">
         {editing ? (
           <input
+            id={balanceInputId}
             type="number"
+            inputMode="numeric"
             min="0"
             step="0.01"
             value={draftValue}
             onChange={(e) => onDraftChange(e.target.value)}
             placeholder="0"
-            className="w-28 bg-muted rounded-lg px-2.5 py-1.5 text-sm font-medium text-foreground text-right focus:outline-none focus:ring-2 focus:ring-foreground/20"
+            aria-label={`Balance for ${asset.name}`}
+            className="w-28 bg-muted rounded-lg px-2.5 py-1.5 text-base font-medium text-foreground text-right focus:outline-none focus:ring-2 focus:ring-foreground/20"
           />
         ) : showBalance ? (
           <div className="flex items-center gap-2">
@@ -628,9 +639,9 @@ function AssetRow({
                 onClick={onDelete}
                 disabled={saving}
                 className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                title="Delete asset"
+                aria-label={`Delete ${asset.name}`}
               >
-                <Trash2 size={12} />
+                <Trash2 size={12} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -640,9 +651,9 @@ function AssetRow({
             onClick={onDelete}
             disabled={saving}
             className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-            title="Delete asset"
+            aria-label={`Delete ${asset.name}`}
           >
-            <Trash2 size={12} />
+            <Trash2 size={12} aria-hidden="true" />
           </button>
         )}
       </div>

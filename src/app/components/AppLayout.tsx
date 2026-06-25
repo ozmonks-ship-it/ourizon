@@ -41,7 +41,10 @@ export function AppLayout({
         <div className="max-w-3xl mx-auto px-4 py-6">{children}</div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border flex z-50">
+      <nav
+        aria-label="Main navigation"
+        className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border flex z-50"
+      >
         {NAV.map(({ id, label, emoji, enabled }) => {
           const active = id === screen;
           return (
@@ -51,7 +54,8 @@ export function AppLayout({
               disabled={!enabled}
               onClick={() => enabled && onNavigate(id)}
               aria-current={active ? "page" : undefined}
-              className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-[10px] font-medium transition-all duration-200 ${
+              aria-label={label}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-xs font-medium transition-all duration-200 ${
                 active
                   ? "text-foreground"
                   : enabled
@@ -59,10 +63,13 @@ export function AppLayout({
                     : "text-muted-foreground/40 cursor-not-allowed"
               }`}
             >
-              <span className={`text-xl transition-transform duration-200 ${active ? "scale-110" : ""}`}>
+              <span
+                className={`text-xl transition-transform duration-200 ${active ? "scale-110" : ""}`}
+                aria-hidden="true"
+              >
                 {emoji}
               </span>
-              {label}
+              <span>{label}</span>
             </button>
           );
         })}

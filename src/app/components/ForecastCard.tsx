@@ -100,7 +100,7 @@ export function ForecastCard({
                 strokeDasharray="3 3"
                 strokeOpacity={0.3}
               >
-                <Label value="Today" fill="currentColor" opacity={0.5} fontSize={9} fontWeight={500} />
+                <Label value="Today" fill="currentColor" opacity={0.5} fontSize={11} fontWeight={500} />
               </ReferenceLine>
               <Area
                 type="monotone"
