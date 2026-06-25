@@ -46,11 +46,13 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
     summary,
     saved,
     savedPeriods,
+    isCurrentPeriodSaved,
     setDraftValue,
     setNetIncomeDraft,
     addBucket,
     editBucket,
     removeBucket,
+    removeMonthlyLog,
     saveBuckets,
     setSelectedPeriod,
   } = useLog(session);
@@ -58,9 +60,11 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
   const [addOpen, setAddOpen] = useState(false);
   const [addSubBucketParentId, setAddSubBucketParentId] = useState<string | null>(null);
   const [editingBucket, setEditingBucket] = useState<Bucket | null>(null);
+  const [deleteLogOpen, setDeleteLogOpen] = useState(false);
   const blockMonthlySaveRef = useRef(false);
 
-  const dialogOpen = addOpen || editingBucket !== null || addSubBucketParentId !== null;
+  const dialogOpen =
+    addOpen || editingBucket !== null || addSubBucketParentId !== null || deleteLogOpen;
 
   const guardMonthlySave = useCallback(() => {
     blockMonthlySaveRef.current = true;
@@ -78,6 +82,20 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
     guardMonthlySave();
     setAddSubBucketParentId(null);
   }, [guardMonthlySave]);
+
+  const closeDeleteLogDialog = useCallback(() => {
+    guardMonthlySave();
+    setDeleteLogOpen(false);
+  }, [guardMonthlySave]);
+
+  const handleDeleteMonthlyLog = useCallback(async () => {
+    try {
+      await removeMonthlyLog();
+      closeDeleteLogDialog();
+    } catch {
+      // Error surfaced via hook state.
+    }
+  }, [removeMonthlyLog, closeDeleteLogDialog]);
 
   const handleSaveMonthlyLog = useCallback(() => {
     if (blockMonthlySaveRef.current || dialogOpen) return;
@@ -222,6 +240,26 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
       >
         {savingLog ? "Saving…" : `Save ${monthLabel}`}
       </button>
+
+      {isCurrentPeriodSaved && (
+        <button
+          type="button"
+          disabled={savingLog || dialogOpen}
+          onClick={() => setDeleteLogOpen(true)}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-border bg-card text-destructive font-medium text-sm transition-colors hover:bg-destructive/5 disabled:opacity-50"
+        >
+          <Trash2 size={16} aria-hidden="true" />
+          Delete {monthLabel} log
+        </button>
+      )}
+
+      <DeleteMonthlyLogDialog
+        monthLabel={monthLabel}
+        open={deleteLogOpen}
+        onOpenChange={(open) => !open && closeDeleteLogDialog()}
+        onConfirm={handleDeleteMonthlyLog}
+        saving={savingLog}
+      />
 
       {editingBucket && (
         <EditBucketDialog
@@ -547,6 +585,58 @@ function BucketSection({
         })}
       </div>
     </div>
+  );
+}
+
+function DeleteMonthlyLogDialog({
+  monthLabel,
+  open,
+  onOpenChange,
+  onConfirm,
+  saving,
+}: {
+  monthLabel: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void | Promise<void>;
+  saving: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="sm:max-w-md"
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle className="font-medium">Delete saved log</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <p className="text-sm text-muted-foreground">
+            Remove the saved bucket allocations for {monthLabel}? Bucket definitions are kept; only
+            this month&apos;s saved values are deleted.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+              className="flex flex-1 items-center justify-center px-3 py-2.5 rounded-lg border border-border bg-card text-foreground font-medium text-sm transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void onConfirm()}
+              disabled={saving}
+              className="flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-destructive/10 text-destructive font-medium text-sm transition-colors hover:bg-destructive/15 disabled:opacity-50"
+            >
+              <Trash2 size={16} aria-hidden="true" />
+              {saving ? "Deleting…" : "Delete log"}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

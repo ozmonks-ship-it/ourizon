@@ -117,6 +117,22 @@ export async function deleteBucket(bucketId: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function deleteMonthlyLog(
+  budgetOwnerId: string,
+  year: number,
+  month: number,
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("monthly_logs")
+    .delete()
+    .eq("user_id", budgetOwnerId)
+    .eq("year", year)
+    .eq("month", month);
+
+  if (error) throw error;
+}
+
 export async function saveMonthlyLog(
   year: number,
   month: number,

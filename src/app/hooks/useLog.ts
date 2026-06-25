@@ -14,6 +14,7 @@ import { periodKey } from "../lib/forecast";
 import {
   createBucket,
   deleteBucket,
+  deleteMonthlyLog,
   fetchBuckets,
   fetchMonthlyLog,
   fetchMonthlyLogs,
@@ -63,6 +64,7 @@ interface UseLogResult {
   summary: ReturnType<typeof calculateAllocationSummary>;
   saved: boolean;
   savedPeriods: ReadonlySet<string>;
+  isCurrentPeriodSaved: boolean;
   setDraftValue: (bucketId: string, value: string) => void;
   setNetIncomeDraft: (value: string) => void;
   addBucket: (input: {
@@ -81,6 +83,7 @@ interface UseLogResult {
     },
   ) => Promise<void>;
   removeBucket: (bucketId: string) => Promise<void>;
+  removeMonthlyLog: () => Promise<void>;
   saveBuckets: () => Promise<void>;
   setSelectedPeriod: (year: number, month: number) => void;
   refresh: () => Promise<void>;
@@ -128,6 +131,7 @@ export function useLog(session: Session | null): UseLogResult {
     return map;
   }, [buckets]);
   const hasIncomeBuckets = incomeBuckets.length > 0;
+  const isCurrentPeriodSaved = savedPeriods.has(periodKey(year, month));
   const userId = session?.user.id;
 
   const applyDraftSnapshot = useCallback(
@@ -380,6 +384,32 @@ export function useLog(session: Session | null): UseLogResult {
     setSaved(false);
   }, []);
 
+  const removeMonthlyLog = useCallback(async () => {
+    if (!budgetOwnerId) return;
+
+    setSavingLog(true);
+    setError(null);
+
+    try {
+      await deleteMonthlyLog(budgetOwnerId, year, month);
+      if (userId) {
+        clearDraftSnapshot(userId, year, month);
+      }
+      setSavedPeriods((prev) => {
+        const next = new Set(prev);
+        next.delete(periodKey(year, month));
+        return next;
+      });
+      applyDraftSnapshot(buildDraftFromServer(buckets, 0, new Map()));
+      setSaved(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete log");
+      throw err;
+    } finally {
+      setSavingLog(false);
+    }
+  }, [budgetOwnerId, year, month, userId, buckets, applyDraftSnapshot]);
+
   const saveBuckets = useCallback(async () => {
     setSavingLog(true);
     setError(null);
@@ -429,11 +459,13 @@ export function useLog(session: Session | null): UseLogResult {
     summary,
     saved,
     savedPeriods,
+    isCurrentPeriodSaved,
     setDraftValue,
     setNetIncomeDraft: handleSetNetIncomeDraft,
     addBucket,
     editBucket,
     removeBucket,
+    removeMonthlyLog,
     saveBuckets,
     setSelectedPeriod,
     refresh,
