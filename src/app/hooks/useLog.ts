@@ -10,11 +10,13 @@ import {
   restoreDraftSnapshot,
   saveDraftSnapshot,
 } from "../lib/logDraftStorage";
+import { periodKey } from "../lib/forecast";
 import {
   createBucket,
   deleteBucket,
   fetchBuckets,
   fetchMonthlyLog,
+  fetchMonthlyLogs,
   resolveBudgetOwnerId,
   saveMonthlyLog,
   seedDefaultBuckets,
@@ -60,6 +62,7 @@ interface UseLogResult {
   hasIncomeBuckets: boolean;
   summary: ReturnType<typeof calculateAllocationSummary>;
   saved: boolean;
+  savedPeriods: ReadonlySet<string>;
   setDraftValue: (bucketId: string, value: string) => void;
   setNetIncomeDraft: (value: string) => void;
   addBucket: (input: {
@@ -100,6 +103,7 @@ export function useLog(session: Session | null): UseLogResult {
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [netIncomeDraft, setNetIncomeDraft] = useState("");
   const [saved, setSaved] = useState(false);
+  const [savedPeriods, setSavedPeriods] = useState<ReadonlySet<string>>(new Set());
   const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(null);
 
   const incomeBuckets = useMemo(
@@ -141,6 +145,7 @@ export function useLog(session: Session | null): UseLogResult {
         setDraftValues({});
         setNetIncomeDraft("");
         setBudgetOwnerId(null);
+        setSavedPeriods(new Set());
         setLoading(false);
         return;
       }
@@ -153,6 +158,11 @@ export function useLog(session: Session | null): UseLogResult {
       try {
         const ownerId = await resolveBudgetOwnerId(userId);
         setBudgetOwnerId(ownerId);
+
+        const monthlyLogs = await fetchMonthlyLogs(ownerId);
+        setSavedPeriods(
+          new Set(monthlyLogs.map((log) => periodKey(log.year, log.month))),
+        );
 
         let bucketRows = await fetchBuckets(ownerId);
         if (bucketRows.length === 0) {
@@ -389,6 +399,7 @@ export function useLog(session: Session | null): UseLogResult {
       if (userId) {
         clearDraftSnapshot(userId, year, month);
       }
+      setSavedPeriods((prev) => new Set([...prev, periodKey(year, month)]));
       setSaved(true);
       setTimeout(() => setSaved(false), 3500);
     } catch (err) {
@@ -417,6 +428,7 @@ export function useLog(session: Session | null): UseLogResult {
     hasIncomeBuckets,
     summary,
     saved,
+    savedPeriods,
     setDraftValue,
     setNetIncomeDraft: handleSetNetIncomeDraft,
     addBucket,

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { CalendarDays, Pencil, PlusCircle, Trash2 } from "lucide-react";
+import { Pencil, PlusCircle, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,11 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import {
-  monthInputToPeriod,
-  periodToMonthInput,
-  useLog,
-} from "../hooks/useLog";
+import { MonthPicker } from "../components/MonthPicker";
+import { useLog } from "../hooks/useLog";
 import { fmt } from "../lib/format";
 import type { AllocationMode, Bucket, BucketKind } from "@/lib/supabase/database.types";
 
@@ -48,6 +45,7 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
     hasIncomeBuckets,
     summary,
     saved,
+    savedPeriods,
     setDraftValue,
     setNetIncomeDraft,
     addBucket,
@@ -99,17 +97,13 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
             Set income and expense allocations for a month
           </p>
           <label htmlFor="buckets-month" className="flex items-center gap-2 text-sm text-foreground">
-            <CalendarDays className="size-4 text-muted-foreground shrink-0" aria-hidden />
             <span className="sr-only">Month</span>
-            <input
+            <MonthPicker
               id="buckets-month"
-              type="month"
-              value={periodToMonthInput(year, month)}
-              onChange={(e) => {
-                const next = monthInputToPeriod(e.target.value);
-                setSelectedPeriod(next.year, next.month);
-              }}
-              className="bg-muted rounded-lg px-3 py-2 text-base font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow [color-scheme:dark]"
+              year={year}
+              month={month}
+              savedPeriods={savedPeriods}
+              onChange={setSelectedPeriod}
             />
           </label>
         </div>
