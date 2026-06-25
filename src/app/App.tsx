@@ -8,19 +8,21 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
 import { PwaInstallBanner } from "./components/PwaInstallBanner";
+import { LoadingScreen } from "./components/LoadingScreen";
+import { PageLoader } from "./components/PageLoader";
 import { bootstrapCollaboration } from "./lib/collaborationApi";
 import { createClient } from "@/lib/supabase/client";
 
 export default function App() {
+  const isAuthCallback = window.location.pathname === "/auth/callback";
+  const [introLoading, setIntroLoading] = useState(!isAuthCallback);
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(!isAuthCallback);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [screen, setScreen] = useState<NavScreen>("dashboard");
-  const isAuthCallback = window.location.pathname === "/auth/callback";
 
   useEffect(() => {
     if (isAuthCallback) {
-      setLoading(false);
       return;
     }
 
@@ -28,7 +30,7 @@ export default function App() {
 
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
-      setLoading(false);
+      setAuthLoading(false);
     });
 
     const {
@@ -66,42 +68,38 @@ export default function App() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="dark min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading…</p>
-      </div>
-    );
-  }
-
-  if (!session) {
-    return (
-      <div className="dark">
-        <LoginScreen />
-        <AppUpdateBanner />
-        <PwaInstallBanner />
-      </div>
-    );
-  }
-
-  if (!bootstrapped) {
-    return (
-      <div className="dark min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading…</p>
-      </div>
-    );
-  }
+  const showAuthLoader = !introLoading && authLoading;
+  const showBootstrapLoader = !introLoading && !authLoading && !!session && !bootstrapped;
+  const showApp = !authLoading && !!session && bootstrapped;
+  const showLogin = !authLoading && !session;
 
   return (
     <div className="dark">
       <div className="min-h-screen bg-background text-foreground">
-        <AppLayout session={session} screen={screen} onNavigate={setScreen}>
-          {screen === "dashboard" && <HomeScreen session={session} />}
-          {screen === "assets" && <AssetsScreen session={session} />}
-          {screen === "monthly" && <BucketsScreen session={session} />}
-        </AppLayout>
-        <AppUpdateBanner aboveNav />
-        <PwaInstallBanner aboveNav />
+        {introLoading && <LoadingScreen onDone={() => setIntroLoading(false)} />}
+
+        {showLogin && (
+          <>
+            <LoginScreen />
+            <AppUpdateBanner />
+            <PwaInstallBanner />
+          </>
+        )}
+
+        {showApp && (
+          <>
+            <AppLayout session={session} screen={screen} onNavigate={setScreen}>
+              {screen === "dashboard" && <HomeScreen session={session} />}
+              {screen === "assets" && <AssetsScreen session={session} />}
+              {screen === "monthly" && <BucketsScreen session={session} />}
+            </AppLayout>
+            <AppUpdateBanner aboveNav />
+            <PwaInstallBanner aboveNav />
+          </>
+        )}
+
+        {showAuthLoader && <PageLoader overlay />}
+        {showBootstrapLoader && <PageLoader overlay />}
       </div>
     </div>
   );

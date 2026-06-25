@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { MonthPicker } from "../components/MonthPicker";
+import { PageLoader } from "../components/PageLoader";
 import { useLog } from "../hooks/useLog";
 import { fmt } from "../lib/format";
 import type { AllocationMode, Bucket, BucketKind } from "@/lib/supabase/database.types";
@@ -103,7 +104,7 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
   }, [dialogOpen, saveBuckets]);
 
   if (loading) {
-    return <p className="text-muted-foreground text-sm">Loading…</p>;
+    return <PageLoader />;
   }
 
   return (

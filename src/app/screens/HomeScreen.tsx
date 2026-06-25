@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { ForecastCard } from "../components/ForecastCard";
+import { PageLoader } from "../components/PageLoader";
 import { useAssets } from "../hooks/useAssets";
 import { currentPeriod, useLog } from "../hooks/useLog";
 import { useForecast } from "../hooks/useForecast";
@@ -38,6 +39,11 @@ export function HomeScreen({ session }: HomeScreenProps) {
 
   const greeting = timeOfDayGreeting();
   const firstName = firstNameFromUser(session.user);
+  const isInitialLoad = assetsLoading && bucketsLoading && forecastLoading;
+
+  if (isInitialLoad) {
+    return <PageLoader />;
+  }
 
   return (
     <div className="space-y-5">

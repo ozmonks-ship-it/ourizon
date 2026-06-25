@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import { PageLoader } from "../components/PageLoader";
 import { ASSET_GROUPS } from "../data/assetGroups";
 import { useAssets } from "../hooks/useAssets";
 import { fmt, fmtK, fmtSnapshotDate } from "../lib/format";
@@ -160,11 +161,7 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
   };
 
   if (loading) {
-    return (
-      <div className="py-16 text-center">
-        <p className="text-sm text-muted-foreground">Loading your assets…</p>
-      </div>
-    );
+    return <PageLoader />;
   }
 
   return (
@@ -255,7 +252,8 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
                     fill="currentColor"
                     fillOpacity={0.1}
                     strokeOpacity={0.6}
-                    isAnimationActive={false}
+                    animationDuration={1200}
+                    animationEasing="ease-out"
                     dot={({ key, ...props }) => (
                       <SnapshotChartDot key={key} {...props} onSelect={setSelectedSnapshot} />
                     )}

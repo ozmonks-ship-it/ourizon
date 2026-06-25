@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { OurizonLogo } from "../components/OurizonLogo";
+import { PageLoader } from "../components/PageLoader";
 
 export function AuthCallbackScreen() {
   const [error, setError] = useState<string | null>(null);
@@ -57,22 +57,16 @@ export function AuthCallbackScreen() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
-      <div className="w-full max-w-sm text-center">
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <OurizonLogo size={36} />
-          <span className="text-xl font-medium text-foreground">Ourizon</span>
+      {error ? (
+        <div className="w-full max-w-sm text-center">
+          <p className="text-destructive text-sm mb-4">{error}</p>
+          <a href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Back to sign in
+          </a>
         </div>
-        {error ? (
-          <>
-            <p className="text-destructive text-sm mb-4">{error}</p>
-            <a href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              Back to sign in
-            </a>
-          </>
-        ) : (
-          <p className="text-muted-foreground text-sm">Signing you in…</p>
-        )}
-      </div>
+      ) : (
+        <PageLoader />
+      )}
     </div>
   );
 }

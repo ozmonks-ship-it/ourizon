@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { ForecastPoint } from "../lib/forecast";
 import { fmtK } from "../lib/format";
+import { PageLoader } from "./PageLoader";
 
 function ForecastTooltip({
   active,
@@ -65,7 +66,7 @@ export function ForecastCard({
       </div>
 
       {loading ? (
-        <p className="text-sm text-muted-foreground py-16 text-center">Loading forecast…</p>
+        <PageLoader />
       ) : !hasSnapshots ? (
         <p className="text-sm text-muted-foreground py-16 text-center">
           Save a balance snapshot in Assets to see your forecast.
@@ -112,7 +113,8 @@ export function ForecastCard({
                 dot={false}
                 strokeDasharray="4 4"
                 strokeOpacity={0.4}
-                isAnimationActive={false}
+                animationDuration={1200}
+                animationEasing="ease-out"
               />
               <Area
                 type="monotone"
@@ -123,7 +125,8 @@ export function ForecastCard({
                 fillOpacity={0.1}
                 dot={false}
                 strokeOpacity={0.6}
-                isAnimationActive={false}
+                animationDuration={1200}
+                animationEasing="ease-out"
               />
             </AreaChart>
           </ResponsiveContainer>
