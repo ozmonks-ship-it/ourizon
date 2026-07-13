@@ -1,5 +1,19 @@
 export const DEFAULT_FORECAST_YEARS = 5;
 
+/** Horizons (in years) offered by the Projected value section on the Home screen. */
+export const PROJECTION_HORIZONS = [1, 5, 10] as const;
+
+export type ProjectionHorizon = (typeof PROJECTION_HORIZONS)[number];
+
+/** Longest horizon we ever need to project so the whole card is one forecast. */
+export const MAX_PROJECTION_YEARS = Math.max(...PROJECTION_HORIZONS);
+
+export interface Projection {
+  years: ProjectionHorizon;
+  value: number;
+  growth: number;
+}
+
 export interface BalanceSnapshot {
   recordedAt: string;
   totalWorth: number;

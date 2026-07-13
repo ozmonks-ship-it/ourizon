@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { ForecastCard } from "../components/ForecastCard";
 import { PageLoader } from "../components/PageLoader";
@@ -9,6 +9,7 @@ import { useBudgets } from "../hooks/useBudgets";
 import { ASSET_GROUPS } from "../data/assetGroups";
 import { fmt, fmtK } from "../lib/format";
 import { firstNameFromUser, timeOfDayGreeting } from "../lib/userDisplay";
+import type { Projection, ProjectionHorizon } from "../lib/forecast";
 import type { BudgetWithSpend } from "@/lib/supabase/database.types";
 
 const HOME_BUDGETS_LIMIT = 4;
@@ -24,6 +25,7 @@ export function HomeScreen({ session }: HomeScreenProps) {
     loading: forecastLoading,
     hasSnapshots: forecastReady,
     forecastData,
+    projections,
   } = useForecast(session);
   const {
     loading: budgetsLoading,
@@ -78,9 +80,10 @@ export function HomeScreen({ session }: HomeScreenProps) {
           )}
         </div>
 
-        <ComingSoonCard
-          title="Projected value"
-          subtitle="Long-term projections will appear here."
+        <ProjectedValueCard
+          loading={forecastLoading}
+          hasSnapshots={forecastReady}
+          projections={projections}
         />
       </div>
 
@@ -213,12 +216,62 @@ function BudgetSummaryRow({ budget }: { budget: BudgetWithSpend }) {
   );
 }
 
-function ComingSoonCard({ title, subtitle }: { title: string; subtitle: string }) {
+function ProjectedValueCard({
+  loading,
+  hasSnapshots,
+  projections,
+}: {
+  loading: boolean;
+  hasSnapshots: boolean;
+  projections: Projection[];
+}) {
+  const [horizon, setHorizon] = useState<ProjectionHorizon>(5);
+
+  const selected =
+    projections.find((projection) => projection.years === horizon) ?? projections[0];
+
   return (
     <div className="bg-card border border-border rounded-xl p-5">
-      <p className="text-muted-foreground text-xs mb-2">{title}</p>
-      <p className="text-xl font-medium text-foreground mb-1">Coming soon</p>
-      <p className="text-xs text-muted-foreground">{subtitle}</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-muted-foreground text-xs">Projected value 🔮</p>
+        <div className="flex gap-1">
+          {projections.map((projection) => (
+            <button
+              key={projection.years}
+              type="button"
+              onClick={() => setHorizon(projection.years)}
+              aria-pressed={horizon === projection.years}
+              className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all duration-150 ${
+                horizon === projection.years
+                  ? "bg-foreground text-background"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              {projection.years}yr
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="text-xl font-medium text-foreground">Loading...</p>
+      ) : !hasSnapshots || !selected ? (
+        <>
+          <p className="text-xl font-medium text-foreground mb-1">No snapshot yet</p>
+          <p className="text-xs text-muted-foreground">
+            Save a balance snapshot in Assets to see your projection.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="text-3xl font-medium text-foreground mb-1">{fmtK(selected.value)}</p>
+          <p className="text-xs text-muted-foreground">
+            {selected.growth >= 0 ? "+" : "−"}
+            {fmtK(Math.abs(selected.growth))} projected growth over {selected.years}{" "}
+            {selected.years === 1 ? "year" : "years"}
+          </p>
+        </>
+      )}
     </div>
   );
 }

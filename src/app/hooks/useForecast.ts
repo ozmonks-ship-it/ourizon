@@ -3,9 +3,12 @@ import type { Session } from "@supabase/supabase-js";
 import {
   buildSavingsForecast,
   DEFAULT_FORECAST_YEARS,
+  MAX_PROJECTION_YEARS,
   periodKey,
+  PROJECTION_HORIZONS,
   type BucketSnapshot,
   type ForecastPoint,
+  type Projection,
 } from "../lib/forecast";
 import { fetchMonthlyLogs, resolveBudgetOwnerId } from "../lib/logApi";
 import { useAssets } from "./useAssets";
@@ -16,6 +19,8 @@ interface UseForecastResult {
   hasSnapshots: boolean;
   forecastData: ForecastPoint[];
   forecastYears: number;
+  netWorthToday: number;
+  projections: Projection[];
 }
 
 export function useForecast(session: Session | null): UseForecastResult {
@@ -73,7 +78,10 @@ export function useForecast(session: Session | null): UseForecastResult {
       .sort((a, b) => (a.year !== b.year ? a.year - b.year : a.month - b.month));
   }, [savingsByPeriod]);
 
-  const forecastData = useMemo(() => {
+  // Build a single forecast out to the longest horizon we display, then reuse it
+  // for both the chart (first years) and the Projected value card so every value
+  // comes from the same projection.
+  const fullForecast = useMemo(() => {
     if (!hasSnapshots) return [];
 
     const balanceSnapshots = netWorthHistory.map((point) => ({
@@ -85,7 +93,7 @@ export function useForecast(session: Session | null): UseForecastResult {
       netWorthToday: totalNetWorth,
       startYear,
       startMonth,
-      forecastYears: DEFAULT_FORECAST_YEARS,
+      forecastYears: MAX_PROJECTION_YEARS,
       balanceSnapshots,
       bucketSnapshots,
       fallbackSaving: summary.saving,
@@ -100,10 +108,25 @@ export function useForecast(session: Session | null): UseForecastResult {
     summary.saving,
   ]);
 
+  const forecastData = useMemo(
+    () => fullForecast.slice(0, DEFAULT_FORECAST_YEARS + 1),
+    [fullForecast],
+  );
+
+  const projections = useMemo((): Projection[] => {
+    return PROJECTION_HORIZONS.map((years) => {
+      const point = fullForecast[years];
+      const value = point ? point.projected : totalNetWorth;
+      return { years, value, growth: value - totalNetWorth };
+    });
+  }, [fullForecast, totalNetWorth]);
+
   return {
     loading: assetsLoading || logLoading || logsLoading,
     hasSnapshots,
     forecastData,
     forecastYears: DEFAULT_FORECAST_YEARS,
+    netWorthToday: totalNetWorth,
+    projections,
   };
 }
