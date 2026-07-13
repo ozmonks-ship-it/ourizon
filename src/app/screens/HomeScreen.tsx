@@ -5,9 +5,13 @@ import { PageLoader } from "../components/PageLoader";
 import { useAssets } from "../hooks/useAssets";
 import { currentPeriod, useLog } from "../hooks/useLog";
 import { useForecast } from "../hooks/useForecast";
+import { useBudgets } from "../hooks/useBudgets";
 import { ASSET_GROUPS } from "../data/assetGroups";
 import { fmt, fmtK } from "../lib/format";
 import { firstNameFromUser, timeOfDayGreeting } from "../lib/userDisplay";
+import type { BudgetWithSpend } from "@/lib/supabase/database.types";
+
+const HOME_BUDGETS_LIMIT = 4;
 
 interface HomeScreenProps {
   session: Session;
@@ -21,6 +25,13 @@ export function HomeScreen({ session }: HomeScreenProps) {
     hasSnapshots: forecastReady,
     forecastData,
   } = useForecast(session);
+  const {
+    loading: budgetsLoading,
+    budgets,
+    hasBudgets,
+    totals: budgetTotals,
+    error: budgetsError,
+  } = useBudgets(session);
   const { year: todayYear } = currentPeriod();
 
   const assetClassTotals = useMemo(() => {
@@ -39,7 +50,7 @@ export function HomeScreen({ session }: HomeScreenProps) {
 
   const greeting = timeOfDayGreeting();
   const firstName = firstNameFromUser(session.user);
-  const isInitialLoad = assetsLoading && bucketsLoading && forecastLoading;
+  const isInitialLoad = assetsLoading && bucketsLoading && forecastLoading && budgetsLoading;
 
   if (isInitialLoad) {
     return <PageLoader />;
@@ -137,6 +148,67 @@ export function HomeScreen({ session }: HomeScreenProps) {
           </div>
         )}
       </div>
+
+      <div className="bg-card rounded-xl p-5 border border-border">
+        <div className="flex items-baseline justify-between gap-3 mb-3">
+          <h2 className="font-medium text-base text-foreground">Budgets 🎯</h2>
+          {!budgetsLoading && !budgetsError && hasBudgets && (
+            <p className="text-xs text-muted-foreground tabular-nums shrink-0">
+              {budgetTotals.remaining < 0
+                ? `${fmt(Math.abs(budgetTotals.remaining))} over ${fmt(budgetTotals.allocated)}`
+                : `${fmt(budgetTotals.remaining)} left of ${fmt(budgetTotals.allocated)}`}
+            </p>
+          )}
+        </div>
+        {budgetsLoading ? (
+          <p className="text-sm text-muted-foreground">Loading budgets...</p>
+        ) : budgetsError ? (
+          <p className="text-sm text-destructive">{budgetsError}</p>
+        ) : !hasBudgets ? (
+          <p className="text-sm text-muted-foreground">No budgets yet. Create one in Budgets.</p>
+        ) : (
+          <div className="space-y-2">
+            {budgets.slice(0, HOME_BUDGETS_LIMIT).map((budget) => (
+              <BudgetSummaryRow key={budget.id} budget={budget} />
+            ))}
+            {budgets.length > HOME_BUDGETS_LIMIT && (
+              <p className="text-xs text-muted-foreground pt-0.5">
+                +{budgets.length - HOME_BUDGETS_LIMIT} more in Budgets
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BudgetSummaryRow({ budget }: { budget: BudgetWithSpend }) {
+  const fillWidth = Math.min(100, budget.spentPercent);
+
+  return (
+    <div className="px-3 py-2.5 rounded-lg bg-muted/50">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium text-foreground truncate min-w-0">{budget.name}</p>
+        <p
+          className={`text-sm font-medium tabular-nums shrink-0 ${
+            budget.overspent ? "text-destructive" : "text-foreground"
+          }`}
+        >
+          {budget.overspent ? `${fmt(Math.abs(budget.remaining))} over` : `${fmt(budget.remaining)} left`}
+        </p>
+      </div>
+      <div className="mt-2 h-1.5 rounded-full bg-background overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            budget.overspent ? "bg-destructive" : "bg-foreground"
+          }`}
+          style={{ width: `${fillWidth}%` }}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground mt-1 tabular-nums">
+        {Math.round(budget.spentPercent)}% spent · of {fmt(budget.amount)}
+      </p>
     </div>
   );
 }
