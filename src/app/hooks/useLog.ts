@@ -462,10 +462,16 @@ export function useLog(session: Session | null): UseLogResult {
   }, [buckets]);
 
   const setSelectedPeriod = useCallback((nextYear: number, nextMonth: number) => {
+    // Selecting the month that's already active is a no-op. Skipping avoids
+    // flipping `loading` on without a matching refresh (the refresh effect keys
+    // off year/month, so it wouldn't re-run to turn loading back off).
+    if (selectedPeriod.year === nextYear && selectedPeriod.month === nextMonth) {
+      return;
+    }
     setLoading(true);
     setSelectedPeriodState({ year: nextYear, month: nextMonth });
     setSaved(false);
-  }, []);
+  }, [selectedPeriod]);
 
   const removeMonthlyLog = useCallback(async () => {
     if (!budgetOwnerId) return;
