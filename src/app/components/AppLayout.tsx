@@ -2,14 +2,12 @@ import type { Session } from "@supabase/supabase-js";
 import { OurizonLogo } from "./OurizonLogo";
 import { CollaboratorsMenu } from "./CollaboratorsMenu";
 
-export type NavScreen = "dashboard" | "assets" | "monthly" | "forecast" | "family";
+export type NavScreen = "dashboard" | "assets" | "monthly";
 
 const NAV: { id: NavScreen; label: string; emoji: string; enabled: boolean }[] = [
   { id: "dashboard", label: "Home", emoji: "🏠", enabled: true },
   { id: "assets", label: "Assets", emoji: "💰", enabled: true },
   { id: "monthly", label: "Buckets", emoji: "🪣", enabled: true },
-  { id: "forecast", label: "Forecast", emoji: "🔭", enabled: false },
-  { id: "family", label: "Family", emoji: "👨‍👩‍👧", enabled: false },
 ];
 
 export function AppLayout({
