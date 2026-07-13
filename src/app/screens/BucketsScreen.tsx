@@ -43,6 +43,8 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
     month,
     draftValues,
     netIncomeDraft,
+    placeholderValues,
+    netIncomePlaceholder,
     hasIncomeBuckets,
     summary,
     saved,
@@ -178,7 +180,8 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
                 step={0.01}
                 value={netIncomeDraft}
                 onChange={(e) => setNetIncomeDraft(e.target.value)}
-                className="w-full bg-muted rounded-lg pl-7 pr-3 py-3 text-base text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow"
+                placeholder={netIncomePlaceholder || undefined}
+                className="w-full bg-muted rounded-lg pl-7 pr-3 py-3 text-base text-foreground font-medium placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow"
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
@@ -193,6 +196,7 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
             emoji="💸"
             buckets={incomeBuckets}
             draftValues={draftValues}
+            placeholderValues={placeholderValues}
             summary={summary}
             onValueChange={setDraftValue}
             onEdit={setEditingBucket}
@@ -205,6 +209,7 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
           buckets={expenseBuckets}
           subBucketsByParent={subBucketsByParent}
           draftValues={draftValues}
+          placeholderValues={placeholderValues}
           summary={summary}
           onValueChange={setDraftValue}
           onEdit={setEditingBucket}
@@ -290,6 +295,7 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
 function BucketRow({
   bucket,
   draftValues,
+  placeholderValues,
   summary,
   onValueChange,
   onEdit,
@@ -300,6 +306,7 @@ function BucketRow({
 }: {
   bucket: Bucket;
   draftValues: Record<string, string>;
+  placeholderValues: Record<string, string>;
   summary: ReturnType<typeof import("../lib/bucketAllocation").calculateAllocationSummary>;
   onValueChange: (bucketId: string, value: string) => void;
   onEdit: (bucket: Bucket) => void;
@@ -310,8 +317,9 @@ function BucketRow({
 }) {
   const resolved = summary.byBucketId.get(bucket.id);
   const isPercent = !isItem && bucket.allocation_mode === "percent";
+  const placeholder = placeholderValues[bucket.id];
   const allocationLabel = isPercent
-    ? `${draftValues[bucket.id] || bucket.default_value}% of income`
+    ? `${draftValues[bucket.id] || placeholder || bucket.default_value}% of income`
     : "Fixed amount";
   const remainingLabel =
     !isItem && resolved?.remainingAmount !== undefined
@@ -357,8 +365,9 @@ function BucketRow({
             step={isPercent ? 0.1 : 0.01}
             value={draftValues[bucket.id] ?? ""}
             onChange={(e) => onValueChange(bucket.id, e.target.value)}
+            placeholder={placeholder || undefined}
             aria-label={`${bucket.name} allocation ${isPercent ? "percentage" : "amount"}`}
-            className={`w-24 bg-background rounded-lg py-2 text-base text-foreground text-right font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow ${
+            className={`w-24 bg-background rounded-lg py-2 text-base text-foreground text-right font-medium placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow ${
               isPercent ? "px-2 pr-6" : "pl-6 pr-2"
             }`}
           />
@@ -398,6 +407,7 @@ function ExpenseBucketSection({
   buckets,
   subBucketsByParent,
   draftValues,
+  placeholderValues,
   summary,
   onValueChange,
   onEdit,
@@ -408,6 +418,7 @@ function ExpenseBucketSection({
   buckets: Bucket[];
   subBucketsByParent: Map<string, Bucket[]>;
   draftValues: Record<string, string>;
+  placeholderValues: Record<string, string>;
   summary: ReturnType<typeof import("../lib/bucketAllocation").calculateAllocationSummary>;
   onValueChange: (bucketId: string, value: string) => void;
   onEdit: (bucket: Bucket) => void;
@@ -431,6 +442,7 @@ function ExpenseBucketSection({
               <BucketRow
                 bucket={bucket}
                 draftValues={draftValues}
+                placeholderValues={placeholderValues}
                 summary={summary}
                 onValueChange={onValueChange}
                 onEdit={onEdit}
@@ -444,6 +456,7 @@ function ExpenseBucketSection({
                   key={item.id}
                   bucket={item}
                   draftValues={draftValues}
+                  placeholderValues={placeholderValues}
                   summary={summary}
                   onValueChange={onValueChange}
                   onEdit={onEdit}
@@ -474,6 +487,7 @@ function BucketSection({
   emoji,
   buckets,
   draftValues,
+  placeholderValues,
   summary,
   onValueChange,
   onEdit,
@@ -485,6 +499,7 @@ function BucketSection({
   emoji: string;
   buckets: Bucket[];
   draftValues: Record<string, string>;
+  placeholderValues: Record<string, string>;
   summary: ReturnType<typeof import("../lib/bucketAllocation").calculateAllocationSummary>;
   onValueChange: (bucketId: string, value: string) => void;
   onEdit: (bucket: Bucket) => void;
@@ -505,8 +520,9 @@ function BucketSection({
         {buckets.map((bucket) => {
           const resolved = summary.byBucketId.get(bucket.id);
           const isPercent = bucket.allocation_mode === "percent";
+          const placeholder = placeholderValues[bucket.id];
           const subtitle = isPercent
-            ? `${draftValues[bucket.id] || bucket.default_value}% of income`
+            ? `${draftValues[bucket.id] || placeholder || bucket.default_value}% of income`
             : "Fixed amount";
 
           const bucketInputId = `bucket-${bucket.id}`;
@@ -548,8 +564,9 @@ function BucketSection({
                     step={isPercent ? 0.1 : 0.01}
                     value={draftValues[bucket.id] ?? ""}
                     onChange={(e) => onValueChange(bucket.id, e.target.value)}
+                    placeholder={placeholder || undefined}
                     aria-label={`${bucket.name} allocation ${isPercent ? "percentage" : "amount"}`}
-                    className={`w-24 bg-background rounded-lg py-2 text-base text-foreground text-right font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow ${
+                    className={`w-24 bg-background rounded-lg py-2 text-base text-foreground text-right font-medium placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow ${
                       isPercent ? "px-2 pr-6" : "pl-6 pr-2"
                     }`}
                   />

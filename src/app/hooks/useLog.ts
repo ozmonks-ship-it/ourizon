@@ -45,6 +45,73 @@ function parseDraftValue(raw: string): number {
   return Number.isNaN(value) || value < 0 ? 0 : value;
 }
 
+/**
+ * Values carried over from the most recent saved month before the selected one.
+ * Shown as placeholders on an unsaved month so you can fine-tune from where you
+ * left off rather than starting from scratch.
+ */
+interface CarryForwardSnapshot {
+  values: Record<string, string>;
+  netIncome: string;
+}
+
+const EMPTY_PLACEHOLDERS: Record<string, string> = {};
+
+/** Prefer the user's own draft entry; fall back to the carried-over value when the field is blank. */
+function pickEffectiveValue(draft: string | undefined, carried: string | undefined): string {
+  if (draft !== undefined && draft.trim() !== "") return draft;
+  return carried ?? "";
+}
+
+function findPreviousSavedPeriod(
+  periods: { year: number; month: number }[],
+  year: number,
+  month: number,
+): { year: number; month: number } | null {
+  const target = year * 12 + (month - 1);
+  let best: { year: number; month: number } | null = null;
+  let bestIndex = -1;
+  for (const period of periods) {
+    const index = period.year * 12 + (period.month - 1);
+    if (index < target && index > bestIndex) {
+      bestIndex = index;
+      best = { year: period.year, month: period.month };
+    }
+  }
+  return best;
+}
+
+function emptyDraftValues(bucketRows: Bucket[]): Record<string, string> {
+  const draftValues: Record<string, string> = {};
+  for (const bucket of bucketRows) {
+    draftValues[bucket.id] = "";
+  }
+  return draftValues;
+}
+
+async function buildCarryForward(
+  budgetOwnerId: string,
+  savedPeriods: { year: number; month: number }[],
+  year: number,
+  month: number,
+): Promise<CarryForwardSnapshot | null> {
+  const previous = findPreviousSavedPeriod(savedPeriods, year, month);
+  if (!previous) return null;
+
+  const previousLog = await fetchMonthlyLog(budgetOwnerId, previous.year, previous.month);
+  if (!previousLog) return null;
+
+  const values: Record<string, string> = {};
+  for (const entry of previousLog.monthly_log_entries ?? []) {
+    values[entry.bucket_id] = entry.input_value === 0 ? "" : String(entry.input_value);
+  }
+
+  return {
+    values,
+    netIncome: previousLog.net_income === 0 ? "" : String(previousLog.net_income),
+  };
+}
+
 interface UseLogResult {
   loading: boolean;
   saving: boolean;
@@ -60,6 +127,8 @@ interface UseLogResult {
   month: number;
   draftValues: Record<string, string>;
   netIncomeDraft: string;
+  placeholderValues: Record<string, string>;
+  netIncomePlaceholder: string;
   hasIncomeBuckets: boolean;
   summary: ReturnType<typeof calculateAllocationSummary>;
   saved: boolean;
@@ -105,6 +174,7 @@ export function useLog(session: Session | null): UseLogResult {
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [netIncomeDraft, setNetIncomeDraft] = useState("");
+  const [carryForward, setCarryForward] = useState<CarryForwardSnapshot | null>(null);
   const [saved, setSaved] = useState(false);
   const [savedPeriods, setSavedPeriods] = useState<ReadonlySet<string>>(new Set());
   const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(null);
@@ -148,6 +218,7 @@ export function useLog(session: Session | null): UseLogResult {
         setBuckets([]);
         setDraftValues({});
         setNetIncomeDraft("");
+        setCarryForward(null);
         setBudgetOwnerId(null);
         setSavedPeriods(new Set());
         setLoading(false);
@@ -189,10 +260,20 @@ export function useLog(session: Session | null): UseLogResult {
         const entryMap = new Map(
           (log?.monthly_log_entries ?? []).map((e) => [e.bucket_id, e]),
         );
-        const fromServer = buildDraftFromServer(bucketRows, log?.net_income ?? 0, entryMap);
+
+        // For an unsaved month, carry the previous saved month's values forward as
+        // placeholders so the user can fine-tune instead of starting from scratch.
+        const carried = log ? null : await buildCarryForward(ownerId, monthlyLogs, year, month);
+        setCarryForward(carried);
+
+        const baseSnapshot = log
+          ? buildDraftFromServer(bucketRows, log.net_income ?? 0, entryMap)
+          : carried
+            ? { draftValues: emptyDraftValues(bucketRows), netIncomeDraft: "" }
+            : buildDraftFromServer(bucketRows, 0, entryMap);
         const stored = loadDraftSnapshot(userId, year, month);
         applyDraftSnapshot(
-          stored ? restoreDraftSnapshot(fromServer, stored, bucketRows) : fromServer,
+          stored ? restoreDraftSnapshot(baseSnapshot, stored, bucketRows) : baseSnapshot,
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load log");
@@ -223,7 +304,7 @@ export function useLog(session: Session | null): UseLogResult {
       id: b.id,
       kind: b.kind,
       allocationMode: b.allocation_mode,
-      value: parseDraftValue(draftValues[b.id] ?? ""),
+      value: parseDraftValue(pickEffectiveValue(draftValues[b.id], carryForward?.values[b.id])),
     }));
 
     const expense = buckets
@@ -232,16 +313,18 @@ export function useLog(session: Session | null): UseLogResult {
         id: b.id,
         kind: b.kind,
         allocationMode: b.allocation_mode,
-        value: parseDraftValue(draftValues[b.id] ?? ""),
+        value: parseDraftValue(pickEffectiveValue(draftValues[b.id], carryForward?.values[b.id])),
         parentBucketId: b.parent_bucket_id,
       }));
 
     return {
       income,
       expense,
-      fallbackNetIncome: parseDraftValue(netIncomeDraft),
+      fallbackNetIncome: parseDraftValue(
+        pickEffectiveValue(netIncomeDraft, carryForward?.netIncome),
+      ),
     };
-  }, [incomeBuckets, buckets, draftValues, netIncomeDraft]);
+  }, [incomeBuckets, buckets, draftValues, netIncomeDraft, carryForward]);
 
   const summary = useMemo(
     () =>
@@ -395,12 +478,17 @@ export function useLog(session: Session | null): UseLogResult {
       if (userId) {
         clearDraftSnapshot(userId, year, month);
       }
-      setSavedPeriods((prev) => {
-        const next = new Set(prev);
-        next.delete(periodKey(year, month));
-        return next;
-      });
-      applyDraftSnapshot(buildDraftFromServer(buckets, 0, new Map()));
+
+      const remainingLogs = await fetchMonthlyLogs(budgetOwnerId);
+      setSavedPeriods(new Set(remainingLogs.map((log) => periodKey(log.year, log.month))));
+
+      const carried = await buildCarryForward(budgetOwnerId, remainingLogs, year, month);
+      setCarryForward(carried);
+      applyDraftSnapshot(
+        carried
+          ? { draftValues: emptyDraftValues(buckets), netIncomeDraft: "" }
+          : buildDraftFromServer(buckets, 0, new Map()),
+      );
       setSaved(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete log");
@@ -415,8 +503,17 @@ export function useLog(session: Session | null): UseLogResult {
     setError(null);
 
     try {
+      const effectiveValues: Record<string, string> = {};
+      for (const bucket of buckets) {
+        effectiveValues[bucket.id] = pickEffectiveValue(
+          draftValues[bucket.id],
+          carryForward?.values[bucket.id],
+        );
+      }
+      const effectiveNetIncome = pickEffectiveValue(netIncomeDraft, carryForward?.netIncome);
+
       const entries = buckets.map((bucket) => {
-        const inputValue = parseDraftValue(draftValues[bucket.id] ?? "");
+        const inputValue = parseDraftValue(effectiveValues[bucket.id]);
         const resolved = summary.byBucketId.get(bucket.id)?.resolvedAmount ?? inputValue;
         return {
           bucket_id: bucket.id,
@@ -430,6 +527,13 @@ export function useLog(session: Session | null): UseLogResult {
         clearDraftSnapshot(userId, year, month);
       }
       setSavedPeriods((prev) => new Set([...prev, periodKey(year, month)]));
+
+      // The carried-over values are now this month's saved values, so surface them
+      // as real drafts and drop the placeholders.
+      setDraftValues(effectiveValues);
+      setNetIncomeDraft(effectiveNetIncome);
+      setCarryForward(null);
+
       setSaved(true);
       setTimeout(() => setSaved(false), 3500);
     } catch (err) {
@@ -438,7 +542,7 @@ export function useLog(session: Session | null): UseLogResult {
     } finally {
       setSavingLog(false);
     }
-  }, [buckets, draftValues, summary, year, month, userId]);
+  }, [buckets, draftValues, netIncomeDraft, carryForward, summary, year, month, userId]);
 
   return {
     loading,
@@ -455,6 +559,8 @@ export function useLog(session: Session | null): UseLogResult {
     month,
     draftValues,
     netIncomeDraft,
+    placeholderValues: carryForward?.values ?? EMPTY_PLACEHOLDERS,
+    netIncomePlaceholder: carryForward?.netIncome ?? "",
     hasIncomeBuckets,
     summary,
     saved,
