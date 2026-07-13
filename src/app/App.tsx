@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { AppLayout, type NavScreen } from "./components/AppLayout";
 import { AssetsScreen } from "./screens/AssetsScreen";
 import { BucketsScreen } from "./screens/BucketsScreen";
+import { BudgetsScreen } from "./screens/BudgetsScreen";
 import { AuthCallbackScreen } from "./screens/AuthCallbackScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { LoginScreen } from "./screens/LoginScreen";
@@ -92,6 +93,7 @@ export default function App() {
               {screen === "dashboard" && <HomeScreen session={session} />}
               {screen === "assets" && <AssetsScreen session={session} />}
               {screen === "monthly" && <BucketsScreen session={session} />}
+              {screen === "budgets" && <BudgetsScreen session={session} />}
             </AppLayout>
             <AppUpdateBanner aboveNav />
             <PwaInstallBanner aboveNav />

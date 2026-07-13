@@ -216,6 +216,61 @@ export interface Database {
           resolved_amount?: number;
         };
       };
+      budgets: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          amount: number;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          amount?: number;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          amount?: number;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      budget_expenses: {
+        Row: {
+          id: string;
+          budget_id: string;
+          name: string;
+          amount: number;
+          incurred_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          budget_id: string;
+          name: string;
+          amount?: number;
+          incurred_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          budget_id?: string;
+          name?: string;
+          amount?: number;
+          incurred_at?: string;
+          created_at?: string;
+        };
+      };
     };
     Functions: {
       save_balance_snapshot: {
@@ -257,9 +312,20 @@ export type BalanceSnapshotEntry = Database["public"]["Tables"]["balance_snapsho
 export type Bucket = Database["public"]["Tables"]["buckets"]["Row"];
 export type MonthlyLog = Database["public"]["Tables"]["monthly_logs"]["Row"];
 export type MonthlyLogEntry = Database["public"]["Tables"]["monthly_log_entries"]["Row"];
+export type Budget = Database["public"]["Tables"]["budgets"]["Row"];
+export type BudgetExpense = Database["public"]["Tables"]["budget_expenses"]["Row"];
 
 export interface AssetWithBalance extends Asset {
   balance: number | null;
+}
+
+export interface BudgetWithSpend extends Budget {
+  expenses: BudgetExpense[];
+  spent: number;
+  remaining: number;
+  spentPercent: number;
+  remainingPercent: number;
+  overspent: boolean;
 }
 
 export interface NetWorthPoint {
