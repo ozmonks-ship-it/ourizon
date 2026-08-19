@@ -110,23 +110,38 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-24">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-medium text-foreground mb-1">Buckets 🪣</h1>
           <p className="text-muted-foreground text-sm mb-3">
             Set income and expense allocations for a month
           </p>
-          <label htmlFor="buckets-month" className="flex items-center gap-2 text-sm text-foreground">
-            <span className="sr-only">Month</span>
-            <MonthPicker
-              id="buckets-month"
-              year={year}
-              month={month}
-              savedPeriods={savedPeriods}
-              onChange={setSelectedPeriod}
-            />
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor="buckets-month" className="flex items-center gap-2 text-sm text-foreground">
+              <span className="sr-only">Month</span>
+              <MonthPicker
+                id="buckets-month"
+                year={year}
+                month={month}
+                savedPeriods={savedPeriods}
+                onChange={setSelectedPeriod}
+              />
+            </label>
+
+            {isCurrentPeriodSaved && (
+              <button
+                type="button"
+                disabled={savingLog || dialogOpen}
+                onClick={() => setDeleteLogOpen(true)}
+                title={`Delete ${monthLabel} log`}
+                aria-label={`Delete ${monthLabel} log`}
+                className="inline-flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus:outline-none focus:ring-2 focus:ring-foreground/20 disabled:opacity-50"
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
 
         <AddBucketDialog
@@ -238,26 +253,18 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
         </div>
       </div>
 
-      <button
-        type="button"
-        disabled={savingLog || dialogOpen}
-        onClick={handleSaveMonthlyLog}
-        className="w-full bg-foreground text-background font-medium rounded-xl py-3.5 hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50"
-      >
-        {savingLog ? "Saving…" : `Save ${monthLabel}`}
-      </button>
-
-      {isCurrentPeriodSaved && (
-        <button
-          type="button"
-          disabled={savingLog || dialogOpen}
-          onClick={() => setDeleteLogOpen(true)}
-          className="w-full flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-border bg-card text-destructive font-medium text-sm transition-colors hover:bg-destructive/5 disabled:opacity-50"
-        >
-          <Trash2 size={16} aria-hidden="true" />
-          Delete {monthLabel} log
-        </button>
-      )}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pt-3 pb-20 backdrop-blur-sm">
+        <div className="mx-auto max-w-3xl space-y-2 px-4">
+          <button
+            type="button"
+            disabled={savingLog || dialogOpen}
+            onClick={handleSaveMonthlyLog}
+            className="w-full bg-foreground text-background font-medium rounded-xl py-3.5 hover:opacity-90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50"
+          >
+            {savingLog ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
 
       <DeleteMonthlyLogDialog
         monthLabel={monthLabel}
