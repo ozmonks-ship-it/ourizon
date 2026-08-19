@@ -6,7 +6,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import {
@@ -63,14 +62,14 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
 
   const navHidden = useNavHidden();
 
-  const [addOpen, setAddOpen] = useState(false);
+  const [addKind, setAddKind] = useState<BucketKind | null>(null);
   const [addSubBucketParentId, setAddSubBucketParentId] = useState<string | null>(null);
   const [editingBucket, setEditingBucket] = useState<Bucket | null>(null);
   const [deleteLogOpen, setDeleteLogOpen] = useState(false);
   const blockMonthlySaveRef = useRef(false);
 
   const dialogOpen =
-    addOpen || editingBucket !== null || addSubBucketParentId !== null || deleteLogOpen;
+    addKind !== null || editingBucket !== null || addSubBucketParentId !== null || deleteLogOpen;
 
   const guardMonthlySave = useCallback(() => {
     blockMonthlySaveRef.current = true;
@@ -92,6 +91,11 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
   const closeDeleteLogDialog = useCallback(() => {
     guardMonthlySave();
     setDeleteLogOpen(false);
+  }, [guardMonthlySave]);
+
+  const closeAddDialog = useCallback(() => {
+    guardMonthlySave();
+    setAddKind(null);
   }, [guardMonthlySave]);
 
   const handleDeleteMonthlyLog = useCallback(async () => {
@@ -146,17 +150,6 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
             )}
           </div>
         </div>
-
-        <AddBucketDialog
-          open={addOpen}
-          onOpenChange={(open) => {
-            if (!open) guardMonthlySave();
-            setAddOpen(open);
-          }}
-          onAdd={addBucket}
-          saving={savingBucket}
-          triggerLabel="Add"
-        />
       </div>
 
       {error && (
@@ -178,50 +171,56 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
       )}
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
-        {!hasIncomeBuckets && (
-          <div className="p-5 border-b border-border">
-            <label htmlFor="monthly-income" className="block text-sm font-medium text-foreground mb-2">
-              Net income 💸
-            </label>
-            <div className="relative">
-              <span
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm"
-                aria-hidden="true"
-              >
-                $
-              </span>
-              <input
-                id="monthly-income"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={0.01}
-                value={netIncomeDraft}
-                onChange={(e) => setNetIncomeDraft(e.target.value)}
-                placeholder={netIncomePlaceholder || undefined}
-                className="w-full bg-muted rounded-lg pl-7 pr-3 py-3 text-base text-foreground font-medium placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground mt-1.5">
-              After-tax take-home, or add income buckets below
-            </p>
+        <div className="border-b border-border px-5 py-4 last:border-b-0">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-foreground">Net income 💸</p>
+            <SectionAddButton onClick={() => setAddKind("income")} label="Add income" />
           </div>
-        )}
 
-        {hasIncomeBuckets && (
-          <BucketSection
-            title="Income"
-            emoji="💸"
-            buckets={incomeBuckets}
-            draftValues={draftValues}
-            placeholderValues={placeholderValues}
-            summary={summary}
-            onValueChange={setDraftValue}
-            onEdit={setEditingBucket}
-            onDelete={removeBucket}
-            saving={saving}
-          />
-        )}
+          {hasIncomeBuckets ? (
+            <div className="space-y-2">
+              {incomeBuckets.map((bucket) => (
+                <BucketRow
+                  key={bucket.id}
+                  bucket={bucket}
+                  draftValues={draftValues}
+                  placeholderValues={placeholderValues}
+                  summary={summary}
+                  onValueChange={setDraftValue}
+                  onEdit={setEditingBucket}
+                  onDelete={removeBucket}
+                  saving={saving}
+                />
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="relative">
+                <span
+                  className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm"
+                  aria-hidden="true"
+                >
+                  $
+                </span>
+                <input
+                  id="monthly-income"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={0.01}
+                  value={netIncomeDraft}
+                  onChange={(e) => setNetIncomeDraft(e.target.value)}
+                  placeholder={netIncomePlaceholder || undefined}
+                  aria-label="Net income"
+                  className="w-full bg-muted rounded-lg pl-7 pr-3 py-3 text-base text-foreground font-medium placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                After-tax take-home, or add income buckets with the button above
+              </p>
+            </>
+          )}
+        </div>
 
         <ExpenseBucketSection
           buckets={expenseBuckets}
@@ -232,6 +231,7 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
           onValueChange={setDraftValue}
           onEdit={setEditingBucket}
           onDelete={removeBucket}
+          onAddBucket={() => setAddKind("expense")}
           onAddSubBucket={setAddSubBucketParentId}
           saving={saving}
         />
@@ -272,6 +272,16 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
           </button>
         </div>
       </div>
+
+      {addKind && (
+        <AddBucketDialog
+          kind={addKind}
+          open={addKind !== null}
+          onOpenChange={(open) => !open && closeAddDialog()}
+          onAdd={addBucket}
+          saving={savingBucket}
+        />
+      )}
 
       <DeleteMonthlyLogDialog
         monthLabel={monthLabel}
@@ -426,6 +436,7 @@ function ExpenseBucketSection({
   onValueChange,
   onEdit,
   onDelete,
+  onAddBucket,
   onAddSubBucket,
   saving,
 }: {
@@ -437,16 +448,21 @@ function ExpenseBucketSection({
   onValueChange: (bucketId: string, value: string) => void;
   onEdit: (bucket: Bucket) => void;
   onDelete: (bucketId: string) => Promise<void>;
+  onAddBucket: () => void;
   onAddSubBucket: (parentId: string) => void;
   saving: boolean;
 }) {
-  if (buckets.length === 0) return null;
-
   return (
     <div className="border-b border-border px-5 py-4 last:border-b-0">
       <div className="flex items-center justify-between mb-3">
         <p className="text-sm font-medium text-foreground">Expense buckets 🪣</p>
+        <SectionAddButton onClick={onAddBucket} label="Add expense" />
       </div>
+      {buckets.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No expense buckets yet. Add one to start allocating.
+        </p>
+      ) : (
       <div className="space-y-2">
         {buckets.map((bucket) => {
           const items = subBucketsByParent.get(bucket.id) ?? [];
@@ -492,131 +508,27 @@ function ExpenseBucketSection({
           );
         })}
       </div>
+      )}
     </div>
   );
 }
 
-function BucketSection({
-  title,
-  emoji,
-  buckets,
-  draftValues,
-  placeholderValues,
-  summary,
-  onValueChange,
-  onEdit,
-  onDelete,
-  saving,
-  showResolved = false,
+function SectionAddButton({
+  onClick,
+  label,
 }: {
-  title: string;
-  emoji: string;
-  buckets: Bucket[];
-  draftValues: Record<string, string>;
-  placeholderValues: Record<string, string>;
-  summary: ReturnType<typeof import("../lib/bucketAllocation").calculateAllocationSummary>;
-  onValueChange: (bucketId: string, value: string) => void;
-  onEdit: (bucket: Bucket) => void;
-  onDelete: (bucketId: string) => Promise<void>;
-  saving: boolean;
-  showResolved?: boolean;
+  onClick: () => void;
+  label: string;
 }) {
-  if (buckets.length === 0) return null;
-
   return (
-    <div className="border-b border-border px-5 py-4 last:border-b-0">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-sm font-medium text-foreground">
-          {title} {emoji}
-        </p>
-      </div>
-      <div className="space-y-2">
-        {buckets.map((bucket) => {
-          const resolved = summary.byBucketId.get(bucket.id);
-          const isPercent = bucket.allocation_mode === "percent";
-          const placeholder = placeholderValues[bucket.id];
-          const subtitle = isPercent
-            ? `${draftValues[bucket.id] || placeholder || bucket.default_value}% of income`
-            : "Fixed amount";
-
-          const bucketInputId = `bucket-${bucket.id}`;
-
-          return (
-            <div
-              key={bucket.id}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-muted/50"
-            >
-              <div className="flex-1 min-w-0">
-                <label htmlFor={bucketInputId} className="text-sm font-medium text-foreground cursor-pointer truncate block">
-                  {bucket.name}
-                </label>
-                <p className="text-xs text-muted-foreground">{subtitle}</p>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {showResolved && isPercent && resolved && (
-                  <span className="text-xs text-muted-foreground tabular-nums w-16 text-right">
-                    {fmt(resolved.resolvedAmount)}
-                  </span>
-                )}
-
-                <div className="relative">
-                  {!isPercent && (
-                    <span
-                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm"
-                      aria-hidden="true"
-                    >
-                      $
-                    </span>
-                  )}
-                  <input
-                    id={bucketInputId}
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={isPercent ? 100 : undefined}
-                    step={isPercent ? 0.1 : 0.01}
-                    value={draftValues[bucket.id] ?? ""}
-                    onChange={(e) => onValueChange(bucket.id, e.target.value)}
-                    placeholder={placeholder || undefined}
-                    aria-label={`${bucket.name} allocation ${isPercent ? "percentage" : "amount"}`}
-                    className={`w-24 bg-background rounded-lg py-2 text-base text-foreground text-right font-medium placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow ${
-                      isPercent ? "px-2 pr-6" : "pl-6 pr-2"
-                    }`}
-                  />
-                  {isPercent && (
-                    <span
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm"
-                      aria-hidden="true"
-                    >
-                      %
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => onEdit(bucket)}
-                  className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={`Edit ${bucket.name}`}
-                >
-                  <Pencil className="size-3.5" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void onDelete(bucket.id)}
-                  className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-                  aria-label={`Delete ${bucket.name}`}
-                >
-                  <Trash2 className="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted text-foreground font-medium text-xs transition-all duration-150 hover:bg-muted/70 active:scale-95"
+    >
+      <PlusCircle size={14} aria-hidden="true" />
+      {label}
+    </button>
   );
 }
 
@@ -673,12 +585,13 @@ function DeleteMonthlyLogDialog({
 }
 
 function AddBucketDialog({
+  kind,
   open,
   onOpenChange,
   onAdd,
   saving,
-  triggerLabel,
 }: {
+  kind: BucketKind;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdd: (input: {
@@ -689,16 +602,15 @@ function AddBucketDialog({
     parentBucketId?: string | null;
   }) => Promise<void>;
   saving: boolean;
-  triggerLabel: string;
 }) {
+  const isIncome = kind === "income";
+
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<BucketKind>("expense");
   const [allocationMode, setAllocationMode] = useState<AllocationMode>("percent");
   const [defaultValue, setDefaultValue] = useState("");
 
   const reset = () => {
     setName("");
-    setKind("expense");
     setAllocationMode("percent");
     setDefaultValue("");
   };
@@ -713,12 +625,14 @@ function AddBucketDialog({
     await onAdd({
       name: trimmed,
       kind,
-      allocationMode: kind === "income" ? "amount" : allocationMode,
+      allocationMode: isIncome ? "amount" : allocationMode,
       defaultValue: value,
     });
     reset();
     onOpenChange(false);
   };
+
+  const isPercent = !isIncome && allocationMode === "percent";
 
   return (
     <Dialog
@@ -728,18 +642,11 @@ function AddBucketDialog({
         onOpenChange(next);
       }}
     >
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95"
-        >
-          <PlusCircle size={16} />
-          {triggerLabel}
-        </button>
-      </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-medium">Add bucket</DialogTitle>
+          <DialogTitle className="font-medium">
+            {isIncome ? "Add income bucket" : "Add expense bucket"}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
@@ -750,26 +657,11 @@ function AddBucketDialog({
               id="add-bucket-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Daily Expenses 🛒"
+              placeholder={isIncome ? "e.g. Salary 💰" : "e.g. Daily Expenses 🛒"}
             />
           </div>
 
-          <div>
-            <label htmlFor="add-bucket-type" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Type
-            </label>
-            <Select value={kind} onValueChange={(v) => setKind(v as BucketKind)}>
-              <SelectTrigger id="add-bucket-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="income">Income</SelectItem>
-                <SelectItem value="expense">Expense</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {kind === "expense" && (
+          {!isIncome && (
             <div>
               <label
                 htmlFor="add-bucket-allocation"
@@ -794,17 +686,17 @@ function AddBucketDialog({
 
           <div>
             <label htmlFor="add-bucket-default" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Default {kind === "expense" && allocationMode === "percent" ? "percentage" : "amount"}
+              Default {isPercent ? "percentage" : "amount"}
             </label>
             <Input
               id="add-bucket-default"
               type="number"
               inputMode="numeric"
               min={0}
-              step={kind === "expense" && allocationMode === "percent" ? 0.1 : 0.01}
+              step={isPercent ? 0.1 : 0.01}
               value={defaultValue}
               onChange={(e) => setDefaultValue(e.target.value)}
-              placeholder={kind === "expense" && allocationMode === "percent" ? "10" : "500"}
+              placeholder={isPercent ? "10" : "500"}
             />
           </div>
 
@@ -814,7 +706,7 @@ function AddBucketDialog({
             onClick={() => void handleSubmit()}
             className="w-full py-2.5 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 mt-2 disabled:opacity-50"
           >
-            {saving ? "Adding…" : "Add bucket"}
+            {saving ? "Adding…" : isIncome ? "Add income bucket" : "Add expense bucket"}
           </button>
         </div>
       </DialogContent>
