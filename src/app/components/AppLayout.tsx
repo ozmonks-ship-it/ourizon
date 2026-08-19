@@ -1,8 +1,17 @@
+import { createContext, useContext, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { OurizonLogo } from "./OurizonLogo";
 import { CollaboratorsMenu } from "./CollaboratorsMenu";
 
 export type NavScreen = "dashboard" | "assets" | "monthly" | "budgets";
+
+/** True while the bottom nav-bar is hidden (scrolled away). */
+const NavHiddenContext = createContext(false);
+
+/** Read whether the bottom nav-bar is currently hidden. */
+export function useNavHidden() {
+  return useContext(NavHiddenContext);
+}
 
 const NAV: { id: NavScreen; label: string; emoji: string; enabled: boolean }[] = [
   { id: "dashboard", label: "Home", emoji: "🏠", enabled: true },
@@ -22,6 +31,25 @@ export function AppLayout({
   screen: NavScreen;
   onNavigate: (id: NavScreen) => void;
 }) {
+  const [navHidden, setNavHidden] = useState(false);
+  const lastScrollTop = useRef(0);
+
+  function handleScroll(e: React.UIEvent<HTMLElement>) {
+    const current = e.currentTarget.scrollTop;
+    const last = lastScrollTop.current;
+    // Ignore tiny scroll jitters and rubber-band overscroll at the top.
+    if (Math.abs(current - last) < 8) return;
+
+    if (current > last && current > 24) {
+      // Scrolling down past the top — hide the nav.
+      setNavHidden(true);
+    } else if (current < last) {
+      // Scrolling up — reveal the nav.
+      setNavHidden(false);
+    }
+    lastScrollTop.current = current;
+  }
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm shrink-0">
@@ -36,13 +64,22 @@ export function AppLayout({
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-20 scroll-smooth">
-        <div className="max-w-3xl mx-auto px-4 py-6">{children}</div>
+      <main
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto pb-20 scroll-smooth"
+      >
+        <div className="max-w-3xl mx-auto px-4 py-6">
+          <NavHiddenContext.Provider value={navHidden}>
+            {children}
+          </NavHiddenContext.Provider>
+        </div>
       </main>
 
       <nav
         aria-label="Main navigation"
-        className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border flex z-50"
+        className={`fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border flex z-50 transition-transform duration-300 ease-in-out ${
+          navHidden ? "translate-y-full" : "translate-y-0"
+        }`}
       >
         {NAV.map(({ id, label, emoji, enabled }) => {
           const active = id === screen;

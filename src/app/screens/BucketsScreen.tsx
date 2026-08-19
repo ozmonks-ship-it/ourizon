@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { MonthPicker } from "../components/MonthPicker";
+import { useNavHidden } from "../components/AppLayout";
 import { PageLoader } from "../components/PageLoader";
 import { useLog } from "../hooks/useLog";
 import { fmt } from "../lib/format";
@@ -59,6 +60,8 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
     saveBuckets,
     setSelectedPeriod,
   } = useLog(session);
+
+  const navHidden = useNavHidden();
 
   const [addOpen, setAddOpen] = useState(false);
   const [addSubBucketParentId, setAddSubBucketParentId] = useState<string | null>(null);
@@ -253,7 +256,11 @@ export function BucketsScreen({ session }: BucketsScreenProps) {
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pt-3 pb-20 backdrop-blur-sm">
+      <div
+        className={`fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pt-3 pb-20 backdrop-blur-sm transition-transform duration-300 ease-in-out ${
+          navHidden ? "translate-y-16" : "translate-y-0"
+        }`}
+      >
         <div className="mx-auto max-w-3xl space-y-2 px-4">
           <button
             type="button"
