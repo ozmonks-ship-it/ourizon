@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   Area,
@@ -28,6 +28,12 @@ import {
 } from "../components/ui/select";
 import { PageLoader } from "../components/PageLoader";
 import { ASSET_GROUPS } from "../data/assetGroups";
+import {
+  clearAssetsDraft,
+  loadAssetsDraft,
+  mergeDraftWithAssets,
+  saveAssetsDraft,
+} from "../lib/assetsDraftStorage";
 import { useAssets } from "../hooks/useAssets";
 import { fmt, fmtK, fmtSnapshotDate } from "../lib/format";
 import type { AssetGroupId, AssetWithBalance, NetWorthPoint } from "@/lib/supabase/database.types";
@@ -65,6 +71,30 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
     groupId: "cash" as AssetGroupId,
   });
 
+  const userId = session.user.id;
+  const draftRestored = useRef(false);
+
+  // Restore an in-progress balance edit once assets have loaded. Guards against a
+  // reload (e.g. the mobile OS relaunching the PWA after an app switch) wiping the
+  // values the user had already typed. Runs at most once per mount.
+  useEffect(() => {
+    if (loading || draftRestored.current) return;
+    draftRestored.current = true;
+
+    const stored = loadAssetsDraft(userId);
+    if (stored && assets.length > 0) {
+      setDraftBalances(mergeDraftWithAssets(stored.draftBalances, assets));
+      setEditingSnapshotId(stored.editingSnapshotId);
+      setEditingBalances(true);
+    }
+  }, [loading, userId, assets]);
+
+  // Persist the draft on every change while editing so nothing is lost mid-edit.
+  useEffect(() => {
+    if (loading || !draftRestored.current || !editingBalances) return;
+    saveAssetsDraft(userId, { editingSnapshotId, draftBalances });
+  }, [loading, userId, editingBalances, editingSnapshotId, draftBalances]);
+
   const groupedAssets = useMemo(() => {
     return ASSET_GROUPS.map((group) => ({
       ...group,
@@ -98,6 +128,7 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
     setEditingBalances(false);
     setEditingSnapshotId(null);
     setDraftBalances({});
+    clearAssetsDraft(userId);
   };
 
   const confirmBalances = async () => {
