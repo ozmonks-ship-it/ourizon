@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { Home, PieChart, Target, Wallet, type LucideIcon } from "lucide-react";
 import { OurizonLogo } from "./OurizonLogo";
 import { CollaboratorsMenu } from "./CollaboratorsMenu";
+import { useBusy } from "../lib/dataCache";
 
 export type NavScreen = "dashboard" | "assets" | "monthly" | "budgets";
 
@@ -25,6 +26,7 @@ export function AppLayout({
   onNavigate: (id: NavScreen) => void;
 }) {
   const mainRef = useRef<HTMLElement>(null);
+  const busy = useBusy();
   const firstRender = useRef(true);
 
   // Name the page and move focus to its heading on navigation, so screen-reader
@@ -63,7 +65,7 @@ export function AppLayout({
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
-      <header className="shrink-0 border-b border-border bg-card/50 pt-[env(safe-area-inset-top)] backdrop-blur-sm">
+      <header className="relative shrink-0 border-b border-border bg-card/50 pt-[env(safe-area-inset-top)] backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2">
             <OurizonLogo size={30} />
@@ -73,9 +75,10 @@ export function AppLayout({
           </div>
           <CollaboratorsMenu session={session} />
         </div>
+        <div className="load-bar" data-on={busy} aria-hidden="true" />
       </header>
 
-      <main ref={mainRef} tabIndex={-1} className="relative flex-1 overflow-y-auto overscroll-contain scroll-smooth focus:outline-none">
+      <main ref={mainRef} tabIndex={-1} aria-busy={busy} className="relative flex-1 overflow-y-auto overscroll-contain scroll-smooth focus:outline-none">
         <div className="mx-auto max-w-3xl px-4 pt-6 pb-8">{children}</div>
       </main>
 

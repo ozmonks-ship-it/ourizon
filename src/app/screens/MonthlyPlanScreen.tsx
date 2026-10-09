@@ -15,9 +15,9 @@ import {
   describedBy,
 } from "../components/ui/kit";
 import { MonthPicker } from "../components/MonthPicker";
-import { PageLoader } from "../components/PageLoader";
+import { ScreenSkeleton } from "../components/ScreenSkeleton";
 import { PlanMeter } from "../components/PlanMeter";
-import { useToast } from "../components/Toast";
+import { useAnnounce, useToast } from "../components/Toast";
 import { useLog } from "../hooks/useLog";
 import { addMonths } from "../lib/forecast";
 import { fmt, fmtMonth, fmtMonthName, toInputValue } from "../lib/format";
@@ -36,6 +36,7 @@ type AddTarget = { kind: BucketKind; parent: Bucket | null };
 export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
   const {
     loading,
+    periodLoading,
     savingBucket,
     savingLog,
     error,
@@ -61,6 +62,7 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
     setSelectedPeriod,
   } = useLog(session);
   const toast = useToast();
+  const announce = useAnnounce();
 
   const [dirty, setDirty] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -82,6 +84,13 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
     setDirty(false);
     setFieldErrors({});
   }, [year, month]);
+
+  // When a month finishes loading in place, tell screen-reader users.
+  const wasPeriodLoading = useRef(false);
+  useEffect(() => {
+    if (wasPeriodLoading.current && !periodLoading) announce(`Showing the ${fmtMonth(year, month)} plan`);
+    wasPeriodLoading.current = periodLoading;
+  }, [periodLoading, announce, year, month]);
 
   useEffect(() => {
     if (dialogOpen) return;
@@ -166,14 +175,19 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
   };
 
   if (loading) {
-    return <PageLoader />;
+    return <ScreenSkeleton title="Monthly plan" shape="plan" />;
   }
+
+  // While another month loads, the last one stays visible but dimmed and out of
+  // reach (inert), so nobody edits or saves figures that are about to change.
+  const stale = periodLoading ? " is-stale" : "";
+  const staleProps = (periodLoading ? { inert: "", "aria-busy": true } : {}) as Record<string, unknown>;
 
   const prevMonth = addMonths(year, month, -1);
   const nextMonth = addMonths(year, month, 1);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="screen-enter flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h1 tabIndex={-1} className="text-2xl font-semibold text-foreground focus:outline-none">
           Monthly plan
@@ -210,10 +224,14 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
           </button>
         </div>
         <div className="ml-auto flex items-center gap-1">
-          <StatusChip tone={isCurrentPeriodSaved ? "good" : "warn"}>
-            {isCurrentPeriodSaved ? "Saved" : "Not saved yet"}
-          </StatusChip>
-          {isCurrentPeriodSaved && (
+          {periodLoading ? (
+            <StatusChip tone="neutral">Loading…</StatusChip>
+          ) : (
+            <StatusChip tone={isCurrentPeriodSaved ? "good" : "warn"}>
+              {isCurrentPeriodSaved ? "Saved" : "Not saved yet"}
+            </StatusChip>
+          )}
+          {isCurrentPeriodSaved && !periodLoading && (
             <button
               type="button"
               className={`${iconBtn} -mr-2`}
@@ -232,7 +250,7 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
         </p>
       )}
 
-      {carriedFrom && !isCurrentPeriodSaved && (
+      {carriedFrom && !isCurrentPeriodSaved && !periodLoading && (
         <Callout title={`Filled in from your ${fmtMonth(carriedFrom.year, carriedFrom.month)} plan`}>
           Change anything that's different this month, then save.
         </Callout>
@@ -241,13 +259,14 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
       <section
         id="plan-summary"
         aria-labelledby="summary-heading"
-        className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5"
+        className={`flex flex-col gap-3 rounded-2xl border border-border bg-card p-5${stale}`}
+        {...staleProps}
       >
         <h2 id="summary-heading" className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Summary
         </h2>
         <PlanMeter income={summary.totalIncome} spending={summary.totalExpenses} />
-        {over && (
+        {over && !periodLoading && (
           <p role="alert" className="font-semibold text-destructive">
             You've planned {fmt(Math.abs(summary.saving))} more than your income. Lower a category or add income
             to save this plan.
@@ -255,7 +274,11 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
         )}
       </section>
 
-      <section aria-labelledby="income-heading" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-5">
+      <section
+        aria-labelledby="income-heading"
+        className={`flex flex-col gap-2 rounded-2xl border border-border bg-card p-5${stale}`}
+        {...staleProps}
+      >
         <div className="flex flex-wrap items-center gap-2">
           <h2 id="income-heading" className="flex-1 text-lg font-semibold text-foreground">
             Income
@@ -294,7 +317,11 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
         )}
       </section>
 
-      <section aria-labelledby="spending-heading" className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-5">
+      <section
+        aria-labelledby="spending-heading"
+        className={`flex flex-col gap-2 rounded-2xl border border-border bg-card p-5${stale}`}
+        {...staleProps}
+      >
         <div className="flex flex-wrap items-center gap-2">
           <h2 id="spending-heading" className="flex-1 text-lg font-semibold text-foreground">
             Spending
@@ -383,7 +410,7 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
           type="button"
           className={`${btnPrimary} w-full`}
           onClick={() => void handleSave()}
-          disabled={savingLog}
+          disabled={savingLog || periodLoading}
           aria-disabled={over || undefined}
           aria-describedby={over ? "plan-summary" : undefined}
         >

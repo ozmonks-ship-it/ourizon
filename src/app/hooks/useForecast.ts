@@ -12,6 +12,7 @@ import {
   type Projection,
 } from "../lib/forecast";
 import { fetchMonthlyLogs, resolveBudgetOwnerId } from "../lib/logApi";
+import { readCache, trackBusy, writeCache } from "../lib/dataCache";
 import { useAssets } from "./useAssets";
 import { currentPeriod, useLog } from "./useLog";
 
@@ -36,8 +37,10 @@ export function useForecast(session: Session | null): UseForecastResult {
     netWorthHistory,
   } = useAssets(session);
   const { loading: logLoading, summary } = useLog(session);
-  const [logsLoading, setLogsLoading] = useState(true);
-  const [savingsByPeriod, setSavingsByPeriod] = useState<Map<string, number>>(new Map());
+  const logsKey = `forecast-logs:${session?.user.id ?? ""}`;
+  const [cachedLogs] = useState(() => readCache<Map<string, number>>(logsKey));
+  const [logsLoading, setLogsLoading] = useState(!cachedLogs);
+  const [savingsByPeriod, setSavingsByPeriod] = useState<Map<string, number>>(cachedLogs ?? new Map());
 
   useEffect(() => {
     if (!session?.user.id) {
@@ -49,10 +52,11 @@ export function useForecast(session: Session | null): UseForecastResult {
     let cancelled = false;
 
     void (async () => {
-      setLogsLoading(true);
+      if (!readCache(`forecast-logs:${session.user.id}`)) setLogsLoading(true);
       try {
-        const ownerId = await resolveBudgetOwnerId(session.user.id);
-        const logs = await fetchMonthlyLogs(ownerId);
+        const logs = await trackBusy(
+          (async () => fetchMonthlyLogs(await resolveBudgetOwnerId(session.user.id)))(),
+        );
         if (cancelled) return;
 
         const next = new Map<string, number>();
@@ -60,6 +64,7 @@ export function useForecast(session: Session | null): UseForecastResult {
           next.set(periodKey(log.year, log.month), Number(log.saving_amount));
         }
         setSavingsByPeriod(next);
+        writeCache(`forecast-logs:${session.user.id}`, next);
       } catch {
         if (!cancelled) setSavingsByPeriod(new Map());
       } finally {

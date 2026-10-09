@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { BudgetWithSpend } from "@/lib/supabase/database.types";
 import {
@@ -10,6 +10,12 @@ import {
   resolveBudgetOwnerId,
   updateBudget,
 } from "../lib/budgetsApi";
+import { readCache, trackBusy, writeCache } from "../lib/dataCache";
+
+interface BudgetsCache {
+  ownerId: string;
+  budgets: BudgetWithSpend[];
+}
 
 interface UseBudgetsResult {
   loading: boolean;
@@ -30,11 +36,13 @@ interface UseBudgetsResult {
 }
 
 export function useBudgets(session: Session | null): UseBudgetsResult {
-  const [loading, setLoading] = useState(true);
+  const [cached] = useState(() => readCache<BudgetsCache>(`budgets:${session?.user.id ?? ""}`));
+  const [loading, setLoading] = useState(!cached);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [budgets, setBudgets] = useState<BudgetWithSpend[]>([]);
-  const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(null);
+  const [budgets, setBudgets] = useState<BudgetWithSpend[]>(cached?.budgets ?? []);
+  const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(cached?.ownerId ?? null);
+  const hasData = useRef(Boolean(cached));
 
   const refresh = useCallback(async () => {
     if (!session?.user.id) {
@@ -44,13 +52,20 @@ export function useBudgets(session: Session | null): UseBudgetsResult {
       return;
     }
 
-    setLoading(true);
+    if (!hasData.current) setLoading(true);
     setError(null);
 
     try {
-      const ownerId = await resolveBudgetOwnerId(session.user.id);
+      const { ownerId, rows } = await trackBusy(
+        (async () => {
+          const ownerId = await resolveBudgetOwnerId(session.user.id);
+          return { ownerId, rows: await fetchBudgets(ownerId) };
+        })(),
+      );
       setBudgetOwnerId(ownerId);
-      setBudgets(await fetchBudgets(ownerId));
+      setBudgets(rows);
+      hasData.current = true;
+      writeCache<BudgetsCache>(`budgets:${session.user.id}`, { ownerId, budgets: rows });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load budgets");
     } finally {

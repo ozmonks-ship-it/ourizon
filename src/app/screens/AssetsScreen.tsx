@@ -7,7 +7,7 @@ import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { btnOutline, btnPrimary, iconBtn } from "../components/ui/buttonStyles";
 import { ActionSheet, Callout, ConfirmDialog, Field, FieldError, MoneyInput, describedBy } from "../components/ui/kit";
-import { PageLoader } from "../components/PageLoader";
+import { ScreenSkeleton } from "../components/ScreenSkeleton";
 import { useToast } from "../components/Toast";
 import { ASSET_GROUPS } from "../data/assetGroups";
 import { clearAssetsDraft, loadAssetsDraft, mergeDraftWithAssets, saveAssetsDraft } from "../lib/assetsDraftStorage";
@@ -168,7 +168,7 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
   };
 
   if (loading) {
-    return <PageLoader />;
+    return <ScreenSkeleton title="Assets" shape="assets" />;
   }
 
   const lastUpdated = netWorthHistory[netWorthHistory.length - 1];
@@ -176,7 +176,7 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
   const visibleHistory = showAllHistory ? historyNewestFirst : historyNewestFirst.slice(0, HISTORY_PREVIEW);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="screen-enter flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h1 tabIndex={-1} className="text-2xl font-semibold text-foreground focus:outline-none">
           Assets

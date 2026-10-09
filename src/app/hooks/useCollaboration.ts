@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   fetchBudgetMembers,
@@ -8,6 +8,12 @@ import {
   soloMemberFromSession,
   type BudgetMember,
 } from "../lib/collaborationApi";
+import { readCache, trackBusy, writeCache } from "../lib/dataCache";
+
+interface MembersCache {
+  ownerId: string;
+  members: BudgetMember[];
+}
 
 interface UseCollaborationResult {
   loading: boolean;
@@ -23,11 +29,13 @@ interface UseCollaborationResult {
 }
 
 export function useCollaboration(session: Session | null): UseCollaborationResult {
-  const [loading, setLoading] = useState(true);
+  const [cached] = useState(() => readCache<MembersCache>(`members:${session?.user.id ?? ""}`));
+  const [loading, setLoading] = useState(!cached);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(null);
-  const [members, setMembers] = useState<BudgetMember[]>([]);
+  const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(cached?.ownerId ?? null);
+  const [members, setMembers] = useState<BudgetMember[]>(cached?.members ?? []);
+  const hasData = useRef(Boolean(cached));
 
   const refresh = useCallback(async () => {
     if (!session?.user.id) {
@@ -37,18 +45,21 @@ export function useCollaboration(session: Session | null): UseCollaborationResul
       return;
     }
 
-    setLoading(true);
+    if (!hasData.current) setLoading(true);
     setError(null);
 
     try {
-      const ownerId = await resolveBudgetOwnerId(session.user.id);
-      setBudgetOwnerId(ownerId);
-      const nextMembers = await fetchBudgetMembers(
-        session.user.id,
-        ownerId,
-        session.user,
+      const { ownerId, nextMembers } = await trackBusy(
+        (async () => {
+          const ownerId = await resolveBudgetOwnerId(session.user.id);
+          const nextMembers = await fetchBudgetMembers(session.user.id, ownerId, session.user);
+          return { ownerId, nextMembers };
+        })(),
       );
+      setBudgetOwnerId(ownerId);
       setMembers(nextMembers);
+      hasData.current = true;
+      writeCache<MembersCache>(`members:${session.user.id}`, { ownerId, members: nextMembers });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load collaborators");
       setBudgetOwnerId(session.user.id);
