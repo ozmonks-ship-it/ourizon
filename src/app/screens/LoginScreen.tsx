@@ -3,20 +3,31 @@ import { GoogleSignInButton } from "../components/GoogleSignInButton";
 
 export function LoginScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-6">
+    <main className="min-h-dvh flex items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm">
-        <div className="bg-card border border-border rounded-2xl p-8 text-center">
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <OurizonLogo size={40} />
-            <span className="text-3xl font-medium text-foreground">Ourizon</span>
+        <div className="bg-card border border-border rounded-2xl p-8 text-center flex flex-col gap-6">
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex items-center justify-center gap-2">
+              <OurizonLogo size={40} />
+              <h1 className="text-3xl font-semibold text-foreground" style={{ fontFamily: "'Fredoka', sans-serif" }}>
+                Ourizon
+              </h1>
+            </div>
+            <p className="text-muted-foreground text-base">Forecast your future, together</p>
           </div>
-          <p className="text-muted-foreground text-sm mb-8">Forecast your future, together</p>
+
+          <p className="text-base text-foreground">
+            See what your household owns, plan each month's income, and track spending for big
+            occasions.
+          </p>
 
           <GoogleSignInButton />
 
-          <p className="text-muted-foreground/60 text-xs mt-4">🔒 Private by default</p>
+          <p className="text-muted-foreground text-sm">
+            Only you can see your data, unless you add someone to your household.
+          </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

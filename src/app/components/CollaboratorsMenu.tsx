@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Mail, Trash2, UserPlus } from "lucide-react";
+import { Mail, UserMinus, UserPlus } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import {
   Dialog,
@@ -10,6 +10,10 @@ import {
   DialogTrigger,
 } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { btnOutline, btnPrimary } from "./ui/buttonStyles";
+import { ConfirmDialog, Field, StatusChip, describedBy } from "./ui/kit";
+import { useToast } from "./Toast";
+import { emailError } from "../lib/validation";
 import { useCollaboration } from "../hooks/useCollaboration";
 import { soloMemberFromSession, type BudgetMember } from "../lib/collaborationApi";
 
@@ -27,13 +31,13 @@ export function MemberAvatar({
   member: BudgetMember;
   size?: "sm" | "md";
 }) {
-  const sizeClass = size === "sm" ? "w-7 h-7 text-xs" : "w-10 h-10 text-sm";
+  const sizeClass = size === "sm" ? "w-8 h-8 text-sm" : "w-11 h-11 text-base";
 
   if (member.avatarUrl) {
     return (
       <img
         src={member.avatarUrl}
-        alt={member.displayName ?? member.email}
+        alt=""
         title={member.displayName ?? member.email}
         className={`${sizeClass} rounded-full border-2 border-background object-cover shrink-0`}
       />
@@ -42,8 +46,9 @@ export function MemberAvatar({
 
   return (
     <div
+      aria-hidden="true"
       title={member.displayName ?? member.email}
-      className={`${sizeClass} rounded-full border-2 border-background flex items-center justify-center font-medium bg-muted text-muted-foreground shrink-0`}
+      className={`${sizeClass} rounded-full border-2 border-background flex items-center justify-center font-bold bg-secondary text-foreground shrink-0`}
     >
       {memberInitials(member)}
     </div>
@@ -53,9 +58,10 @@ export function MemberAvatar({
 function HeaderAvatars({ members }: { members: BudgetMember[] }) {
   const active = members.filter((member) => !member.pending);
 
+  // Small gap between avatars so initials are never covered (A16).
   return (
-    <div className="flex -space-x-1.5">
-      {active.map((member) => (
+    <div className="flex gap-1" aria-hidden="true">
+      {active.slice(0, 3).map((member) => (
         <MemberAvatar key={member.userId} member={member} />
       ))}
     </div>
@@ -65,9 +71,11 @@ function HeaderAvatars({ members }: { members: BudgetMember[] }) {
 export function CollaboratorsMenu({ session }: { session: Session }) {
   const { members, activeMembers, isOwner, saving, error, invite, remove } =
     useCollaboration(session);
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<BudgetMember | null>(null);
 
   const fallbackMembers = useMemo(
     () => soloMemberFromSession(session.user.id, session.user),
@@ -84,179 +92,192 @@ export function CollaboratorsMenu({ session }: { session: Session }) {
   const dialogMembers = members.length > 0 ? members : fallbackMembers;
   const pendingInvites = dialogMembers.filter((member) => member.pending);
   const isBudgetOwner = isOwner || dialogMembers.every((member) => member.isYou);
+  const peopleCount = displayMembers.length;
 
   const handleInvite = async () => {
-    if (!email.trim()) return;
+    const problem = emailError(email);
+    setFieldError(problem);
+    if (problem) {
+      document.getElementById("invite-email")?.focus();
+      return;
+    }
 
     try {
-      await invite(email);
+      const added = email.trim();
+      await invite(added);
       setEmail("");
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      toast(`${added} can now sign in to see this household`);
     } catch {
       // error surfaced via hook
     }
   };
 
+  const memberName = (member: BudgetMember) => member.displayName ?? member.email;
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/60 transition-colors border border-transparent hover:border-border"
-          aria-label="Share budget and manage collaborators"
-        >
-          <HeaderAvatars members={displayMembers} />
-          <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            <UserPlus size={14} />
-            Share
-          </span>
-        </button>
-      </DialogTrigger>
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            className="flex min-h-11 items-center gap-2 rounded-xl border-2 border-field-border px-3 py-1 transition-colors hover:bg-muted"
+          >
+            <HeaderAvatars members={displayMembers} />
+            <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
+              <UserPlus className="size-4" aria-hidden="true" />
+              Household
+              <span className="sr-only">
+                , {peopleCount} {peopleCount === 1 ? "person" : "people"}
+              </span>
+            </span>
+          </button>
+        </DialogTrigger>
 
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Shared budget</DialogTitle>
-          <DialogDescription>
-            Invite someone by email to collaborate on this budget. No email is sent — they get
-            access when they sign in with that address.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Household members</DialogTitle>
+            <DialogDescription>
+              Everyone listed here sees and edits the same assets, monthly plans and budgets.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="px-4 py-3 border-b border-border bg-muted/30">
-              <p className="font-medium text-sm text-foreground">Members</p>
-            </div>
-            <div className="divide-y divide-border">
-              {dialogMembers
-                .filter((member) => !member.pending)
-                .map((member) => (
-                  <div key={member.userId} className="flex items-center gap-3 px-4 py-3">
-                    <MemberAvatar member={member} size="md" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-foreground text-sm truncate">
-                          {member.displayName ?? member.email}
+          <div className="space-y-5">
+            <section aria-labelledby="members-heading" className="space-y-1">
+              <h3 id="members-heading" className="text-base font-bold text-foreground">
+                Members
+              </h3>
+              <ul className="divide-y divide-border">
+                {dialogMembers
+                  .filter((member) => !member.pending)
+                  .map((member) => (
+                    <li key={member.userId} className="flex items-center gap-3 py-2">
+                      <MemberAvatar member={member} size="md" />
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words font-semibold text-foreground">
+                          {memberName(member)}
+                          {member.isYou && <span className="font-normal text-muted-foreground"> (you)</span>}
                         </p>
-                        {member.isYou && (
-                          <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
-                            you
-                          </span>
+                        {member.displayName && (
+                          <p className="break-words text-sm text-muted-foreground">{member.email}</p>
                         )}
                       </div>
-                      {member.displayName && (
-                        <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+                      <StatusChip tone="neutral">{member.isOwner ? "Owner" : "Member"}</StatusChip>
+                      {isBudgetOwner && !member.isOwner && member.inviteId && (
+                        <button
+                          type="button"
+                          onClick={() => setRemoving(member)}
+                          disabled={saving}
+                          className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                          aria-label={`Remove ${memberName(member)} from the household`}
+                        >
+                          <UserMinus className="size-5" aria-hidden="true" />
+                        </button>
                       )}
-                    </div>
-                    <span className="text-xs font-medium px-2.5 py-1 rounded-md shrink-0 bg-muted text-muted-foreground">
-                      {member.isOwner ? "Owner" : "Collaborator"}
-                    </span>
-                    {isBudgetOwner && !member.isOwner && member.inviteId && (
-                      <button
-                        type="button"
-                        onClick={() => void remove(member.inviteId!)}
-                        disabled={saving}
-                        className="w-7 h-7 rounded-md bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                        aria-label={`Remove ${member.displayName ?? member.email}`}
-                      >
-                        <Trash2 size={13} aria-hidden="true" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-            </div>
-          </div>
+                    </li>
+                  ))}
+              </ul>
+            </section>
 
-          {pendingInvites.length > 0 && (
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
-              <div className="px-4 py-3 border-b border-border bg-muted/30">
-                <p className="font-medium text-sm text-foreground">Pending access</p>
-              </div>
-              <div className="divide-y divide-border">
-                {pendingInvites.map((invite) => (
-                  <div key={invite.inviteId} className="flex items-center gap-3 px-4 py-3">
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 bg-muted/50">
-                      <Mail size={16} className="text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{invite.email}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Access granted — waiting for sign-in
-                      </p>
-                    </div>
-                    {isBudgetOwner && invite.inviteId && (
-                      <button
-                        type="button"
-                        onClick={() => void remove(invite.inviteId!)}
-                        disabled={saving}
-                        className="w-7 h-7 rounded-md bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                        aria-label={`Cancel invite for ${invite.email}`}
-                      >
-                        <Trash2 size={13} aria-hidden="true" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+            {pendingInvites.length > 0 && (
+              <section aria-labelledby="pending-heading" className="space-y-1">
+                <h3 id="pending-heading" className="text-base font-bold text-foreground">
+                  Waiting to sign in
+                </h3>
+                <ul className="divide-y divide-border">
+                  {pendingInvites.map((pending) => (
+                    <li key={pending.inviteId} className="flex items-center gap-3 py-2">
+                      <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-muted" aria-hidden="true">
+                        <Mail className="size-5 text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words font-semibold text-foreground">{pending.email}</p>
+                        <p className="text-sm text-muted-foreground">Can join when they sign in with this email</p>
+                      </div>
+                      {isBudgetOwner && pending.inviteId && (
+                        <button
+                          type="button"
+                          onClick={() => setRemoving(pending)}
+                          disabled={saving}
+                          className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                          aria-label={`Cancel access for ${pending.email}`}
+                        >
+                          <UserMinus className="size-5" aria-hidden="true" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
-          {isBudgetOwner && (
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
-              <div className="px-4 py-3 border-b border-border bg-muted/30">
-                <p className="font-medium text-sm text-foreground">Invite someone</p>
-              </div>
-              <div className="px-4 py-4 space-y-3">
-                {success && (
-                  <div className="flex items-center gap-2.5 rounded-lg p-3 bg-muted/50">
-                    <span className="text-lg">✓</span>
-                    <div>
-                      <p className="font-medium text-sm text-foreground">Access granted</p>
-                      <p className="text-xs text-muted-foreground">
-                        They can sign in with that email to collaborate
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label
-                    htmlFor="invite-email"
-                    className="block text-xs font-medium text-muted-foreground mb-1.5"
-                  >
-                    Email address
-                  </label>
+            {isBudgetOwner && (
+              <form
+                className="space-y-3"
+                noValidate
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void handleInvite();
+                }}
+              >
+                <Field
+                  id="invite-email"
+                  label="Add someone by email"
+                  hint="Use the Google address they sign in with. We don't send them an email, so let them know yourself."
+                  error={fieldError}
+                >
                   <Input
                     id="invite-email"
                     type="email"
                     inputMode="email"
                     autoComplete="email"
-                    placeholder="their@email.com"
+                    placeholder="sam@example.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void handleInvite();
+                    aria-invalid={fieldError ? true : undefined}
+                    aria-describedby={describedBy("invite-email", true, fieldError)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (fieldError) setFieldError(null);
                     }}
                   />
+                </Field>
+
+                {error && (
+                  <p role="alert" className="text-sm font-semibold text-destructive">
+                    {error}
+                  </p>
+                )}
+
+                <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                  <button type="button" className={`${btnOutline} flex-1`} onClick={() => setOpen(false)}>
+                    Close
+                  </button>
+                  <button type="submit" disabled={saving} className={`${btnPrimary} flex-1`}>
+                    <UserPlus aria-hidden="true" />
+                    {saving ? "Adding…" : "Give access"}
+                  </button>
                 </div>
+              </form>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
-                {error && <p className="text-sm text-destructive">{error}</p>}
-
-                <button
-                  type="button"
-                  onClick={() => void handleInvite()}
-                  disabled={saving || !email.trim()}
-                  className="w-full flex items-center justify-center gap-2 bg-foreground text-background rounded-lg px-4 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-                >
-                  <UserPlus size={16} />
-                  Grant access
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(next) => !next && setRemoving(null)}
+        title={removing?.pending ? `Cancel access for ${removing.email}?` : `Remove ${removing ? memberName(removing) : ""}?`}
+        description={
+          removing?.pending
+            ? "They won't be able to join this household when they sign in."
+            : "They'll lose access to this household's assets, plans and budgets straight away. You can add them again later."
+        }
+        confirmLabel={removing?.pending ? "Cancel access" : "Remove"}
+        onConfirm={async () => {
+          if (!removing?.inviteId) return;
+          await remove(removing.inviteId);
+          toast(removing.pending ? "Access cancelled" : `${memberName(removing)} removed`);
+        }}
+      />
+    </>
   );
 }

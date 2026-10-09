@@ -19,15 +19,15 @@ export function AppUpdateBanner({ aboveNav = false }: { aboveNav?: boolean }) {
             <RefreshCw className="size-5" aria-hidden="true" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground">Update available</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-base font-semibold text-foreground">Update available</p>
+            <p className="text-sm text-muted-foreground mt-1">
               A new version of Ourizon is ready. Refresh to get the latest changes.
             </p>
             <div className="flex items-center gap-2 mt-3">
               <button
                 type="button"
                 onClick={refresh}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-medium px-3 py-2 hover:opacity-90 active:scale-[0.98] transition-all"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold px-4 min-h-11 hover:opacity-90 active:scale-[0.98] transition-all"
               >
                 <RefreshCw className="size-3.5" aria-hidden="true" />
                 Refresh now
@@ -35,7 +35,7 @@ export function AppUpdateBanner({ aboveNav = false }: { aboveNav?: boolean }) {
               <button
                 type="button"
                 onClick={dismiss}
-                className="rounded-xl text-xs font-medium px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="rounded-xl text-sm font-semibold px-4 min-h-11 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 Later
               </button>
@@ -45,9 +45,9 @@ export function AppUpdateBanner({ aboveNav = false }: { aboveNav?: boolean }) {
             type="button"
             onClick={dismiss}
             aria-label="Dismiss update notice"
-            className="shrink-0 rounded-lg p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="shrink-0 inline-flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            <X className="size-4" aria-hidden="true" />
+            <X className="size-5" aria-hidden="true" />
           </button>
         </div>
       </div>

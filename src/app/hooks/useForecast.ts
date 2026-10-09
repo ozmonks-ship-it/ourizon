@@ -6,6 +6,7 @@ import {
   MAX_PROJECTION_YEARS,
   periodKey,
   PROJECTION_HORIZONS,
+  savingForMonth,
   type BucketSnapshot,
   type ForecastPoint,
   type Projection,
@@ -18,6 +19,10 @@ interface UseForecastResult {
   loading: boolean;
   hasSnapshots: boolean;
   forecastData: ForecastPoint[];
+  /** Yearly points from today out to the longest horizon (index = years from now). */
+  fullForecast: ForecastPoint[];
+  /** Monthly saving the forecast assumes for the coming months. */
+  monthlySaving: number;
   forecastYears: number;
   netWorthToday: number;
   projections: Projection[];
@@ -125,6 +130,8 @@ export function useForecast(session: Session | null): UseForecastResult {
     loading: assetsLoading || logLoading || logsLoading,
     hasSnapshots,
     forecastData,
+    fullForecast,
+    monthlySaving: savingForMonth(bucketSnapshots, startYear, startMonth, summary.saving),
     forecastYears: DEFAULT_FORECAST_YEARS,
     netWorthToday: totalNetWorth,
     projections,

@@ -8,6 +8,8 @@ UX and accessibility audit of Ourizon. It checks the app against WCAG 2.2 AA and
 
 31 findings: 12 high, 12 medium, 7 low.
 
+**Status:** all findings are implemented in the app (see the Screens and Accessibility sections of the root README). After the changes, axe-core reports no WCAG 2.2 A/AA violations on any screen or dialog, every control is at least 44px, and no text is smaller than 14px.
+
 ## Fix these five first
 
 1. **A1 – Dialogs ignore the dark theme.** `App.tsx` puts `dark` on a wrapper `div`, but Radix portals mount on `<body>`, so every dialog and select renders in the light palette (axe finds contrast failures at 4.07:1). Put `dark` on `<html>`.
