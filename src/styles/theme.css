@@ -146,6 +146,8 @@
 
   body {
     @apply bg-background text-foreground;
+    /* The app shell scrolls inside <main>; stop iOS chaining scroll to the page. */
+    overscroll-behavior: none;
   }
 
   /**
