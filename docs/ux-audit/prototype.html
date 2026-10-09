@@ -1,0 +1,749 @@
+<title>Ourizon Accessible Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;700;800&display=swap">
+<style>
+/* Layout: phone-sized app frame on the left, "what changed" notes on the right; stacks on narrow screens. */
+:root {
+  /* Dark-first: Ourizon's existing brand palette, with text and borders raised to pass WCAG AA. */
+  --bg: #12082A;
+  --surface: #1E1040;
+  --surface-2: #2A1860;
+  --fg: #F4F0FF;
+  --muted: #C3B8E6;
+  --line: rgba(195, 184, 230, .22);
+  --field-line: #8C7BD0;
+  --accent: #A88BFF;
+  --accent-ink: #12082A;
+  --good: #6FDCA5;
+  --warn: #FFD166;
+  --bad: #FF8A94;
+  --focus: #FFD166;
+  --page: #0B0520;
+  --scrim: rgba(5, 2, 15, .7);
+  --display: "Fredoka", "Nunito", system-ui, sans-serif;
+  --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #FBF8FF; --surface: #FFFFFF; --surface-2: #F1ECFF; --fg: #1A0A3B; --muted: #574A82;
+    --line: rgba(87, 74, 130, .2); --field-line: #7B6DAA; --accent: #6B46F5; --accent-ink: #FFFFFF;
+    --good: #12704A; --warn: #8A5A00; --bad: #C0283A; --focus: #6B46F5; --page: #ECE6FA; --scrim: rgba(26, 10, 59, .45);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #FBF8FF; --surface: #FFFFFF; --surface-2: #F1ECFF; --fg: #1A0A3B; --muted: #574A82;
+  --line: rgba(87, 74, 130, .2); --field-line: #7B6DAA; --accent: #6B46F5; --accent-ink: #FFFFFF;
+  --good: #12704A; --warn: #8A5A00; --bad: #C0283A; --focus: #6B46F5; --page: #ECE6FA; --scrim: rgba(26, 10, 59, .45);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.5; }
+.stage { display: flex; gap: 32px; justify-content: center; align-items: flex-start; padding-inline: 16px; padding-block: 24px; flex-wrap: wrap; }
+
+/* ---------- App frame ---------- */
+.phone { width: 100%; max-width: 400px; height: min(820px, calc(100svh - 48px)); min-height: 560px; background: var(--bg); border-radius: 28px; border: 1px solid var(--line); overflow: hidden; display: flex; flex-direction: column; position: relative; box-shadow: 0 30px 60px -30px rgba(0,0,0,.6); }
+.app-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.brand { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-weight: 600; font-size: 1.2rem; }
+.brand svg { width: 30px; height: 30px; }
+main { flex: 1; overflow-y: auto; padding: 20px 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+main:focus { outline: none; }
+.bottom-nav { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); background: var(--surface); }
+.bottom-nav button { min-height: 64px; background: none; border: 0; color: var(--muted); font: 700 .8rem/1.2 var(--body); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; position: relative; }
+.bottom-nav button svg { width: 24px; height: 24px; }
+.bottom-nav button[aria-current="page"] { color: var(--fg); }
+.bottom-nav button[aria-current="page"]::before { content: ""; position: absolute; top: 0; left: 25%; right: 25%; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent); }
+
+/* ---------- Type ---------- */
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-family: var(--display); font-weight: 600; font-size: 1.6rem; line-height: 1.2; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.15rem; line-height: 1.3; }
+h3 { font-size: 1rem; font-weight: 700; }
+p { margin: 0; }
+.sub { color: var(--muted); font-size: .95rem; }
+.small { font-size: .875rem; }
+.num { font-variant-numeric: tabular-nums; }
+.big { font-family: var(--display); font-weight: 600; font-size: 2rem; line-height: 1.15; }
+.eyebrow { font-size: .8rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.page-head { display: flex; flex-direction: column; gap: 4px; }
+
+/* ---------- Surfaces ---------- */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; align-items: center; gap: 12px; }
+.row > .grow { flex: 1; min-width: 0; }
+.list { display: flex; flex-direction: column; }
+.list > * + * { border-top: 1px solid var(--line); }
+.list-item { display: flex; align-items: center; gap: 12px; padding-block: 10px; min-height: 56px; }
+.list-item .grow { flex: 1; min-width: 0; }
+.name { font-weight: 700; overflow-wrap: anywhere; }
+
+/* ---------- Controls ---------- */
+button, input, select { font: inherit; color: inherit; }
+.btn { min-height: 44px; padding: 10px 16px; border-radius: 12px; border: 2px solid transparent; font-weight: 800; font-size: .95rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; background: var(--surface-2); color: var(--fg); text-decoration: none; }
+.btn svg { width: 18px; height: 18px; flex: none; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-outline { background: transparent; border-color: var(--field-line); }
+.btn-danger { background: var(--bad); color: var(--accent-ink); }
+.btn-block { width: 100%; }
+.btn-link { background: none; border: 0; color: var(--accent); font-weight: 800; min-height: 44px; padding: 0 4px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.icon-btn { width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.icon-btn:hover { background: var(--surface-2); color: var(--fg); }
+.icon-btn svg { width: 22px; height: 22px; }
+button:disabled, button[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label, .label { font-weight: 700; font-size: .95rem; }
+.hint { color: var(--muted); font-size: .875rem; }
+.error { color: var(--bad); font-size: .875rem; font-weight: 700; display: flex; gap: 6px; align-items: flex-start; }
+.error svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.input-wrap { display: flex; align-items: center; border: 2px solid var(--field-line); border-radius: 12px; background: var(--bg); min-height: 48px; padding-inline: 12px; gap: 6px; }
+.input-wrap:focus-within { border-color: var(--focus); }
+.input-wrap[data-invalid] { border-color: var(--bad); }
+.input-wrap input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-size: 1rem; font-weight: 700; padding-block: 10px; }
+.input-wrap .unit { color: var(--muted); font-weight: 700; }
+.input-wrap.compact { min-height: 44px; width: 132px; flex: none; }
+.input-wrap.compact input { text-align: right; }
+
+.seg { display: inline-flex; border: 2px solid var(--field-line); border-radius: 12px; padding: 2px; gap: 2px; }
+.seg label { position: relative; }
+.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg span { display: flex; align-items: center; justify-content: center; min-width: 52px; min-height: 40px; padding-inline: 10px; border-radius: 9px; font-weight: 800; font-size: .9rem; color: var(--muted); }
+.seg input:checked + span { background: var(--accent); color: var(--accent-ink); }
+.seg input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 1px; }
+
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: .8rem; font-weight: 800; border: 1.5px solid currentColor; white-space: nowrap; }
+.chip svg { width: 14px; height: 14px; }
+.chip.good { color: var(--good); } .chip.bad { color: var(--bad); } .chip.warn { color: var(--warn); } .chip.neutral { color: var(--muted); }
+
+.bar { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; display: flex; }
+.bar > span { display: block; height: 100%; }
+.callout { border-radius: 14px; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start; border: 2px solid var(--line); background: var(--surface); }
+.callout svg { width: 22px; height: 22px; flex: none; margin-top: 1px; }
+.callout.info { border-color: var(--accent); } .callout.info svg { color: var(--accent); }
+.callout.warn { border-color: var(--warn); } .callout.warn svg { color: var(--warn); }
+.callout.bad { border-color: var(--bad); } .callout.bad svg { color: var(--bad); }
+.callout .grow { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+.sticky-actions { position: sticky; bottom: -24px; margin-inline: -16px; margin-bottom: -24px; padding: 12px 16px 16px; background: var(--bg); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; z-index: 2; }
+.sticky-actions .row { gap: 8px; }
+.sticky-actions .row .btn { flex: 1; }
+
+/* Steps (new user) */
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.step { display: flex; gap: 12px; padding: 14px; border-radius: 16px; border: 2px solid var(--line); background: var(--surface); }
+.step[data-state="next"] { border-color: var(--accent); }
+.step-dot { width: 32px; height: 32px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; background: var(--surface-2); }
+.step[data-state="done"] .step-dot { background: var(--good); color: var(--accent-ink); }
+.step[data-state="next"] .step-dot { background: var(--accent); color: var(--accent-ink); }
+.step .grow { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+/* Chart */
+.chart svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .875rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 22px; height: 0; border-top: 3px solid var(--accent); display: inline-block; }
+.legend i.dash { border-top-style: dashed; }
+details > summary { cursor: pointer; font-weight: 800; color: var(--accent); min-height: 44px; display: flex; align-items: center; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+td.r, th.r { text-align: right; }
+
+/* Dialog (native <dialog>: focus is trapped, Escape closes, inherits theme) */
+dialog { border: 1px solid var(--line); border-radius: 22px; padding: 0; background: var(--surface); color: var(--fg); width: min(380px, calc(100vw - 32px)); max-height: calc(100svh - 48px); }
+dialog::backdrop { background: var(--scrim); }
+.dlg { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.dlg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.dlg-head .icon-btn { margin: -8px -8px 0 0; }
+.dlg-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dlg-actions .btn { flex: 1 1 120px; }
+
+/* Toast */
+.toast { position: absolute; left: 12px; right: 12px; bottom: 76px; background: var(--fg); color: var(--bg); border-radius: 14px; padding: 10px 10px 10px 16px; display: flex; align-items: center; gap: 8px; font-weight: 700; z-index: 5; }
+.toast[hidden] { display: none !important; }
+.toast .grow { flex: 1; }
+.toast button { background: none; border: 0; color: var(--bg); font-weight: 800; text-decoration: underline; min-height: 44px; padding: 0 10px; cursor: pointer; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+/* ---------- Notes panel ---------- */
+.notes { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 16px; padding-top: 8px; }
+.notes h2 { font-size: 1.3rem; }
+.notes .card { background: var(--bg); }
+.notes ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.notes li { color: var(--fg); }
+.ref { font-size: .75rem; font-weight: 800; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
+.scenario { display: flex; flex-direction: column; gap: 8px; }
+
+@media (max-width: 860px) { .notes { max-width: 400px; } }
+@media (prefers-reduced-motion: no-preference) {
+  .bar > span { transition: width .4s ease; }
+  .toast { animation: rise .2s ease-out; }
+  @keyframes rise { from { transform: translateY(8px); opacity: 0; } }
+}
+</style>
+
+<div class="stage">
+  <div class="phone" id="phone">
+    <header class="app-header">
+      <div class="brand">
+        <svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#7C5CFC"/><path d="M8 27h24" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><path d="M12 27a8 8 0 0 1 16 0" fill="none" stroke="#fff" stroke-width="2.4"/><circle cx="20" cy="27" r="2.6" fill="#FFD166"/><path d="M20 11v3M10.5 15l2 2M29.5 15l-2 2M7 21h3M30 21h3" stroke="#FFD166" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <span>Ourizon</span>
+      </div>
+      <button class="btn btn-outline" id="share-btn" type="button" style="min-height:40px;padding:6px 12px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/></svg>
+        Household
+      </button>
+    </header>
+    <main id="main" tabindex="-1"></main>
+    <nav class="bottom-nav" aria-label="Main">
+      <button type="button" data-nav="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
+      <button type="button" data-nav="assets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M16 13h2M3 10h18M7 6V4h10v2"/></svg>Assets</button>
+      <button type="button" data-nav="plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg>Monthly plan</button>
+      <button type="button" data-nav="budgets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>Budgets</button>
+    </nav>
+    <div class="toast" id="toast" hidden><span class="grow" id="toast-text"></span><button type="button" id="toast-undo">Undo</button></div>
+    <div class="sr-only" role="status" aria-live="polite" id="live"></div>
+  </div>
+
+  <aside class="notes" aria-labelledby="notes-title">
+    <div class="page-head">
+      <p class="eyebrow">UX audit prototype</p>
+      <h2 id="notes-title">What changed on this screen</h2>
+      <p class="sub">Each change links to a finding ID in the audit report. Sample data only; nothing here is saved.</p>
+    </div>
+    <div class="card scenario">
+      <span class="label" id="scenario-label">Try it as</span>
+      <div class="seg" role="radiogroup" aria-labelledby="scenario-label">
+        <label><input type="radio" name="scenario" value="returning" checked><span>Returning user</span></label>
+        <label><input type="radio" name="scenario" value="new"><span>Brand-new user</span></label>
+      </div>
+    </div>
+    <div class="card" id="notes-body"></div>
+  </aside>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlg-title"><form method="dialog" class="dlg" id="dlg-form" novalidate></form></dialog>
+
+<script>
+(() => {
+  const TODAY = new Date(2026, 9, 9);
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const GROUPS = [
+    { id: "cash", label: "Cash" }, { id: "stocks", label: "Shares and ETFs" }, { id: "crypto", label: "Crypto" },
+    { id: "property", label: "Property" }, { id: "super", label: "Super" },
+  ];
+  const COLORS = { cash: "var(--good)", stocks: "var(--accent)", crypto: "var(--warn)", property: "#4ECDC4", super: "var(--bad)" };
+
+  const money = (n) => (n < 0 ? "−" : "") + "$" + Math.abs(n).toLocaleString("en-AU", { maximumFractionDigits: Math.abs(n) % 1 ? 2 : 0, minimumFractionDigits: Math.abs(n) % 1 ? 2 : 0 });
+  const compact = (n) => n >= 1e6 ? "$" + (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : n >= 1e3 ? "$" + Math.round(n / 1e3) + "k" : "$" + Math.round(n);
+  const dateLong = (d) => d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear();
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const parseAmount = (raw) => { const t = String(raw).replace(/[$,\s]/g, ""); if (t === "") return { ok: false, empty: true }; if (!/^\d+(\.\d{0,2})?$/.test(t)) return { ok: false }; return { ok: true, value: parseFloat(t) }; };
+
+  const I = {
+    more: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>',
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+    left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>',
+    right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  };
+
+  // ---------- Sample data ----------
+  function seedReturning() {
+    const base = [4200, 18000, 32000, 6500, 480000, 96000];
+    const assets = [
+      ["a1", "Everyday account", "CommBank", "cash"], ["a2", "High-interest savings", "ING", "cash"],
+      ["a3", "VDHG ETF", "Vanguard", "stocks"], ["a4", "Bitcoin", "Swyftx", "crypto"],
+      ["a5", "Apartment in Brunswick", "Self-managed", "property"], ["a6", "AustralianSuper", "AustralianSuper", "super"],
+    ].map(([id, name, institution, group]) => ({ id, name, institution, group }));
+    const records = [];
+    for (let m = 1; m <= 10; m++) {
+      const balances = {};
+      base.forEach((b, i) => { balances[assets[i].id] = Math.round(b * (1 + 0.012 * (m - 1) * (i === 3 ? 2.5 : 1)) + (i === 1 ? m * 900 : 0)); });
+      records.push({ id: "r" + m, date: new Date(2026, m - 1, 3), balances });
+    }
+    return {
+      user: "Alex",
+      assets, records,
+      plans: { "2026-9": true }, // September saved; October not yet
+      plan: {
+        income: [{ id: "i1", name: "Salary", amount: 7800 }],
+        categories: [
+          { id: "c1", name: "Bills", mode: "percent", value: 35, items: [{ id: "x1", name: "Rent", amount: 2200 }, { id: "x2", name: "Utilities", amount: 280 }] },
+          { id: "c2", name: "Daily expenses", mode: "percent", value: 20, items: [{ id: "x3", name: "Groceries", amount: 900 }] },
+          { id: "c3", name: "Fun", mode: "percent", value: 10, items: [] },
+        ],
+      },
+      budgets: [
+        { id: "g1", name: "Türkiye trip", amount: 8000, expenses: [{ id: "e1", name: "Flights", amount: 3400, date: "2026-07-12" }, { id: "e2", name: "Hotel deposit", amount: 1150, date: "2026-08-02" }] },
+        { id: "g2", name: "Christmas gifts", amount: 1200, expenses: [{ id: "e3", name: "Kids' presents", amount: 980, date: "2026-09-20" }, { id: "e4", name: "Decorations", amount: 340, date: "2026-10-01" }] },
+        { id: "g3", name: "New laptop", amount: 2500, expenses: [] },
+      ],
+      members: [{ name: "Alex Morgan", email: "alex@example.com", role: "Owner", you: true }, { name: "Sam Morgan", email: "sam@example.com", role: "Member" }],
+    };
+  }
+  function seedNew() {
+    return { user: "Alex", assets: [], records: [], plans: {}, plan: { income: [{ id: "i1", name: "Take-home pay", amount: 0 }], categories: [] }, budgets: [], members: [{ name: "Alex Morgan", email: "alex@example.com", role: "Owner", you: true }] };
+  }
+
+  let S = seedReturning();
+  let ui = { screen: "home", horizon: 5, updating: false, draft: {}, errors: {}, planMonth: { y: 2026, m: 10 }, planDirty: false, open: {} };
+  let undoFn = null, toastTimer = null;
+
+  // ---------- Derived ----------
+  const latest = () => S.records[S.records.length - 1];
+  const balanceOf = (id) => latest()?.balances[id] ?? 0;
+  const totalOf = (r) => r ? S.assets.reduce((s, a) => s + (r.balances[a.id] ?? 0), 0) : 0;
+  const incomeTotal = () => S.plan.income.reduce((s, i) => s + (i.amount || 0), 0);
+  const catAmount = (c) => c.mode === "percent" ? Math.round(incomeTotal() * c.value) / 100 : c.value;
+  const spendTotal = () => S.plan.categories.reduce((s, c) => s + catAmount(c), 0);
+  const leftToSave = () => incomeTotal() - spendTotal();
+  const budgetStats = (b) => { const spent = b.expenses.reduce((s, e) => s + e.amount, 0); return { spent, left: b.amount - spent, pct: b.amount ? spent / b.amount * 100 : 0 }; };
+  const monthKey = (p) => p.y + "-" + p.m;
+  const monthName = (p) => MONTHS[p.m - 1] + " " + p.y;
+
+  // ---------- Toast / live ----------
+  function announce(msg) { const el = document.getElementById("live"); el.textContent = ""; setTimeout(() => (el.textContent = msg), 50); }
+  function toast(msg, undo) {
+    const t = document.getElementById("toast");
+    document.getElementById("toast-text").textContent = msg;
+    const u = document.getElementById("toast-undo"); u.hidden = !undo; undoFn = undo || null;
+    t.hidden = false; announce(msg + (undo ? ". Undo is available." : ""));
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 7000);
+  }
+  document.getElementById("toast-undo").addEventListener("click", () => { if (undoFn) { undoFn(); undoFn = null; document.getElementById("toast").hidden = true; render(); announce("Undone"); } });
+
+  // ---------- Dialog helpers ----------
+  const dlg = document.getElementById("dlg"), form = document.getElementById("dlg-form");
+  let dlgSubmit = null, returnFocus = null;
+  function openDialog(title, body, actions, onSubmit, desc) {
+    returnFocus = document.activeElement;
+    form.innerHTML = `<div class="dlg-head"><h2 id="dlg-title">${esc(title)}</h2><button type="button" class="icon-btn" data-close aria-label="Close">${I.close}</button></div>${desc ? `<p class="sub" id="dlg-desc">${desc}</p>` : ""}${body}<div class="dlg-actions">${actions}</div>`;
+    desc ? dlg.setAttribute("aria-describedby", "dlg-desc") : dlg.removeAttribute("aria-describedby");
+    dlgSubmit = onSubmit; dlg.showModal();
+    const first = form.querySelector("input, select"); (first || form.querySelector(".dlg-actions .btn")).focus();
+  }
+  function closeDialog() { dlg.close(); }
+  dlg.addEventListener("close", () => { if (returnFocus && document.contains(returnFocus)) returnFocus.focus(); });
+  form.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) closeDialog(); });
+  form.addEventListener("submit", (e) => { e.preventDefault(); const action = e.submitter?.value; if (action === "cancel") return closeDialog(); if (dlgSubmit && dlgSubmit(action) !== false) closeDialog(); });
+
+  function fieldHTML(id, label, { value = "", hint = "", unit = "", type = "text", mode = "text", placeholder = "" } = {}) {
+    return `<div class="field"><label for="${id}">${label}</label>${hint ? `<span class="hint" id="${id}-hint">${hint}</span>` : ""}
+      <div class="input-wrap">${unit === "$" ? '<span class="unit" aria-hidden="true">$</span>' : ""}<input id="${id}" type="${type}" inputmode="${mode}" value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off" ${hint ? `aria-describedby="${id}-hint"` : ""}>${unit === "%" ? '<span class="unit" aria-hidden="true">%</span>' : ""}</div>
+      <p class="error" id="${id}-err" hidden></p></div>`;
+  }
+  function setError(id, msg) {
+    const input = document.getElementById(id), err = document.getElementById(id + "-err"), wrap = input.closest(".input-wrap");
+    const hint = document.getElementById(id + "-hint") ? id + "-hint" : "";
+    if (msg) { err.innerHTML = I.alert + "<span>" + esc(msg) + "</span>"; err.hidden = false; input.setAttribute("aria-invalid", "true"); input.setAttribute("aria-describedby", (hint + " " + id + "-err").trim()); wrap.setAttribute("data-invalid", ""); }
+    else { err.hidden = true; input.removeAttribute("aria-invalid"); hint ? input.setAttribute("aria-describedby", hint) : input.removeAttribute("aria-describedby"); wrap.removeAttribute("data-invalid"); }
+    return !msg;
+  }
+  const val = (id) => document.getElementById(id).value;
+  function requireName(id, what) { return setError(id, val(id).trim() ? "" : `Enter a name for this ${what}.`); }
+  function requireAmount(id, { allowZero = false } = {}) {
+    const p = parseAmount(val(id));
+    if (p.empty) return setError(id, "Enter an amount, like 1200 or 1200.50.") && null;
+    if (!p.ok) return setError(id, "Use numbers only, like 1200 or 1200.50.") && null;
+    if (!allowZero && p.value === 0) return setError(id, "Enter an amount more than $0.") && null;
+    setError(id, ""); return p.value;
+  }
+  function confirmDelete(title, desc, label, onYes) {
+    openDialog(title, "", `<button class="btn" value="cancel">Keep it</button><button class="btn btn-danger" value="ok">${esc(label)}</button>`, (a) => { if (a === "ok") onYes(); }, desc);
+  }
+
+  // ---------- Chart ----------
+  function forecastChart(horizon) {
+    const W = 340, H = 190, L = 46, R = 12, T = 26, B = 28;
+    const rec = S.records.map((r) => ({ t: r.date.getFullYear() + r.date.getMonth() / 12, v: totalOf(r) }));
+    const now = rec[rec.length - 1], saving = leftToSave();
+    const proj = []; for (let k = 0; k <= horizon * 12; k += 3) proj.push({ t: now.t + k / 12, v: now.v + saving * k });
+    const t0 = 2026, t1 = now.t + horizon, vmax = Math.max(...proj.map((p) => p.v), ...rec.map((p) => p.v)) * 1.08;
+    const step = vmax > 800000 ? 250000 : 100000;
+    const x = (t) => L + (t - t0) / (t1 - t0) * (W - L - R), y = (v) => T + (1 - v / vmax) * (H - T - B);
+    const path = (pts) => pts.map((p, i) => (i ? "L" : "M") + x(p.t).toFixed(1) + " " + y(p.v).toFixed(1)).join(" ");
+    let grid = "";
+    for (let v = 0; v <= vmax; v += step) grid += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" fill="var(--muted)" font-size="12">${compact(v)}</text>`;
+    let xt = "", every = horizon > 5 ? 2 : 1;
+    for (let yr = 2026; yr <= Math.floor(t1); yr += every) xt += `<text x="${x(yr)}" y="${H - 8}" text-anchor="middle" fill="var(--muted)" font-size="12">${yr}</text>`;
+    const end = proj[proj.length - 1];
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="fc-sum">
+      ${grid}${xt}
+      <line x1="${x(now.t)}" x2="${x(now.t)}" y1="${T - 4}" y2="${H - B}" stroke="var(--muted)" stroke-dasharray="2 3"/>
+      <text x="${x(now.t)}" y="${T - 10}" text-anchor="middle" fill="var(--fg)" font-size="12" font-weight="700">Today</text>
+      <path d="${path(proj)}" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="7 6" stroke-linecap="round"/>
+      <path d="${path(rec)}" fill="none" stroke="var(--accent)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${x(now.t)}" cy="${y(now.v)}" r="5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+      <circle cx="${x(end.t)}" cy="${y(end.v)}" r="5" fill="var(--surface)" stroke="var(--accent)" stroke-width="3"/>
+    </svg>`;
+  }
+
+  // ---------- Screens ----------
+  const NOTES = {
+    home: [
+      ["The heading is your greeting. The page now opens with a summary in plain words.", "U12"],
+      ["A Needs attention card brings up overspent budgets and unsaved months, with a button to fix each one.", "U2"],
+      ["Net worth shows its change since last month in words and with an arrow, so it doesn't rely on colour alone.", "U7"],
+      ["The forecast has a legend and a fixed Today label, and says what it assumes. The figures are also available as a table.", "U6, A6"],
+      ["The year picker is a real radio group with 44px targets.", "A3"],
+      ["Asset classes are one compact list with each one's share of the total.", "U9"],
+      ["The plan summary uses everyday words: income, planned spending, left to save.", "U1"],
+      ["For brand-new users, a three-step checklist replaces five empty cards.", "U2"],
+    ],
+    assets: [
+      ["Balance history is a list with Edit and Remove buttons. The chart is no longer the only, mouse-only way in.", "A6"],
+      ["One name for one action: Update balances, then Save balances.", "U8"],
+      ["Balance fields show a $ sign, last month's value, a keypad with a decimal point, and a clear error if something's wrong.", "A8, A15"],
+      ["Removing an account asks first and says what will be lost.", "A7"],
+      ["Each row has one 44px More button, so there are no tiny bin icons.", "A3"],
+      ["Totals use the same exact format everywhere.", "U7"],
+    ],
+    plan: [
+      ["Buckets is now Monthly plan, and Saving is now Left to save.", "U1"],
+      ["The month shows a status chip (Saved / Not saved yet). Carried-over values are real, readable values with a note saying where they came from.", "U3, A5"],
+      ["A summary bar shows income, spending and what's left. Planning more than you earn shows a warning and blocks saving.", "U5"],
+      ["Category names wrap instead of being cut off, and each row has one short line of detail.", "U4"],
+      ["The Save button names the month and shows when there are unsaved changes.", "U3"],
+      ["Add item and More are full-size 44px buttons.", "A3"],
+    ],
+    budgets: [
+      ["Each budget has a status chip with an icon and words (On track, Over by $120), so it doesn't rely on colour alone.", "A12, U10"],
+      ["One word throughout: Left.", "U10"],
+      ["Progress bars have text equivalents for screen readers.", "A6"],
+      ["Deleting a budget asks first. Removing an expense can be undone.", "A7"],
+      ["Log expense checks your input and explains any mistakes.", "A8"],
+    ],
+  };
+
+  function screenHome() {
+    if (!S.records.length) return homeNew();
+    const r = latest(), prev = S.records[S.records.length - 2];
+    const nw = totalOf(r), diff = prev ? nw - totalOf(prev) : 0;
+    const h = ui.horizon, saving = leftToSave(), future = nw + saving * 12 * h;
+    const over = S.budgets.map((b) => ({ b, s: budgetStats(b) })).filter((x) => x.s.left < 0);
+    const unsaved = !S.plans[monthKey({ y: 2026, m: 10 })];
+    const groups = GROUPS.map((g) => ({ ...g, total: S.assets.filter((a) => a.group === g.id).reduce((s, a) => s + balanceOf(a.id), 0) })).filter((g) => g.total > 0).sort((a, b) => b.total - a.total);
+    const inc = incomeTotal(), sp = spendTotal();
+    const attention = [
+      ...over.map((x) => `<li class="list-item"><div class="grow"><p class="name">${esc(x.b.name)} is ${money(-x.s.left)} over budget</p></div><button class="btn btn-outline" data-go="budgets">Review</button></li>`),
+      ...(unsaved ? [`<li class="list-item"><div class="grow"><p class="name">Your October plan isn't saved yet</p></div><button class="btn btn-outline" data-go="plan">Open plan</button></li>`] : []),
+    ];
+    return `
+      <div class="page-head"><h1 id="page-title" tabindex="-1">Good afternoon, ${esc(S.user)}</h1><p class="sub">Here's where your money stands on ${dateLong(TODAY)}.</p></div>
+      ${attention.length ? `<section class="callout warn" aria-labelledby="att-h">${I.alert}<div class="grow"><h2 id="att-h">Needs attention</h2><ul class="list" style="list-style:none;margin:0;padding:0">${attention.join("")}</ul></div></section>` : ""}
+      <section class="card" aria-labelledby="nw-h">
+        <h2 id="nw-h" class="eyebrow">Net worth</h2>
+        <p class="big num">${money(nw)}</p>
+        <p class="row small" style="gap:6px;color:${diff >= 0 ? "var(--good)" : "var(--bad)"}"><span style="width:18px;height:18px;display:inline-flex;${diff < 0 ? "transform:rotate(180deg)" : ""}">${I.up}</span><span class="num" style="font-weight:800">${diff >= 0 ? "Up" : "Down"} ${money(Math.abs(diff))} since ${MONTHS[prev.date.getMonth()]}</span></p>
+        <p class="hint">Based on the balances you recorded on ${dateLong(r.date)}.</p>
+      </section>
+      <section class="card" aria-labelledby="fc-h">
+        <div class="row" style="flex-wrap:wrap;justify-content:space-between"><h2 id="fc-h">Forecast</h2>
+          <div class="seg" role="radiogroup" aria-label="Forecast length">${[1, 5, 10].map((n) => `<label><input type="radio" name="hz" value="${n}" ${n === h ? "checked" : ""}><span>${n} yr</span></label>`).join("")}</div></div>
+        <p id="fc-sum"><span class="sub">In ${h} ${h === 1 ? "year" : "years"} you could have about</span><br><span class="big num">${money(Math.round(future / 1000) * 1000)}</span></p>
+        <div class="chart">${forecastChart(h)}</div>
+        <div class="legend" aria-hidden="true"><span><i></i>Recorded</span><span><i class="dash"></i>Forecast</span></div>
+        <p class="hint">Assumes you keep saving ${money(saving)} a month, as in your monthly plan. It doesn't include investment returns, interest or inflation.</p>
+        <details><summary>Show forecast as a table</summary>
+          <table><caption class="sr-only">Forecast net worth by year</caption><thead><tr><th scope="col">Year</th><th scope="col" class="r">Net worth</th></tr></thead><tbody>
+          ${Array.from({ length: h + 1 }, (_, k) => `<tr><td>${k === 0 ? "Today" : "In " + k + (k === 1 ? " year" : " years")}</td><td class="r num">${money(nw + saving * 12 * k)}</td></tr>`).join("")}
+          </tbody></table></details>
+      </section>
+      <section class="card" aria-labelledby="own-h">
+        <div class="row"><h2 id="own-h" class="grow">What you own</h2><button class="btn-link" data-go="assets">See all</button></div>
+        <ul class="list" style="list-style:none;margin:0;padding:0">${groups.map((g) => { const pct = Math.round(g.total / nw * 100); return `<li class="list-item" style="flex-direction:column;align-items:stretch;gap:6px"><div class="row"><span class="grow name">${g.label}</span><span class="num" style="font-weight:800">${money(g.total)}</span></div><div class="row" style="gap:10px"><div class="bar grow" aria-hidden="true"><span style="width:${pct}%;background:${COLORS[g.id]}"></span></div><span class="small sub num" style="width:84px;text-align:right">${pct}% of total</span></div></li>`; }).join("")}</ul>
+      </section>
+      <section class="card" aria-labelledby="pl-h">
+        <div class="row"><h2 id="pl-h" class="grow">October plan</h2>${chipFor(unsaved ? "warn" : "good", unsaved ? "Not saved yet" : "Saved")}</div>
+        ${planMeter(inc, sp)}
+      </section>
+      <section class="card" aria-labelledby="bu-h">
+        <div class="row"><h2 id="bu-h" class="grow">Budgets</h2><button class="btn-link" data-go="budgets">See all</button></div>
+        <ul class="list" style="list-style:none;margin:0;padding:0">${S.budgets.map((b) => { const s = budgetStats(b); return `<li class="list-item"><div class="grow"><p class="name">${esc(b.name)}</p><p class="small sub num">${money(s.spent)} of ${money(b.amount)} spent</p></div>${budgetChip(b, s)}</li>`; }).join("")}</ul>
+      </section>`;
+  }
+
+  function homeNew() {
+    const hasAssets = S.assets.length > 0, hasRecord = S.records.length > 0, hasPlan = Object.keys(S.plans).length > 0;
+    const steps = [
+      { done: hasAssets, title: "Add what you own", text: "Bank accounts, shares, property, super. Names only for now; no amounts yet.", btn: "Add an account", act: "add-asset" },
+      { done: hasRecord, title: "Record today's balances", text: "Type in how much is in each account. Do this once a month to see your net worth change.", btn: "Record balances", act: "go-assets-update" },
+      { done: hasPlan, title: "Plan your month", text: "Enter your take-home pay and decide how much goes to bills, spending and savings.", btn: "Start a monthly plan", act: "go-plan" },
+    ];
+    const next = steps.findIndex((s) => !s.done);
+    return `
+      <div class="page-head"><h1 id="page-title" tabindex="-1">Welcome to Ourizon, ${esc(S.user)}</h1><p class="sub">Ourizon shows what you own today and what you could have in the future. It takes about 5 minutes to set up.</p></div>
+      <section aria-labelledby="gs-h" style="display:flex;flex-direction:column;gap:10px"><h2 id="gs-h">Get started in 3 steps</h2>
+      <ol class="steps">${steps.map((s, i) => { const state = s.done ? "done" : i === next ? "next" : "later"; return `<li class="step" data-state="${state}"><span class="step-dot" aria-hidden="true">${s.done ? I.check.replace("<svg", '<svg width="18" height="18"') : i + 1}</span><div class="grow"><h3>${s.title}<span class="sr-only">${s.done ? " (done)" : i === next ? " (next step)" : ""}</span></h3><p class="small sub">${s.text}</p>${state === "next" ? `<button class="btn btn-primary" data-act="${s.act}">${s.btn}</button>` : state === "done" ? `<p class="small" style="color:var(--good);font-weight:800">Done</p>` : ""}</div></li>`; }).join("")}</ol></section>
+      <section class="card" aria-labelledby="see-h"><h2 id="see-h">What you'll see here</h2><ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px" class="small"><li>Your net worth and how it changed since last month</li><li>A forecast of where you could be in 1, 5 or 10 years</li><li>Budgets that need attention</li></ul></section>`;
+  }
+
+  const chipFor = (kind, text) => `<span class="chip ${kind}">${kind === "good" ? I.check : kind === "neutral" ? "" : I.alert}${esc(text)}</span>`;
+  function budgetChip(b, s) { if (s.left < 0) return chipFor("bad", "Over by " + money(-s.left)); if (s.spent === 0) return chipFor("neutral", "Not started"); if (s.pct >= 90) return chipFor("warn", "Almost used"); return chipFor("good", "On track"); }
+  function planMeter(inc, sp) {
+    const left = inc - sp, over = left < 0, spPct = inc ? Math.min(100, sp / inc * 100) : 0;
+    return `<div class="bar" style="height:14px" role="img" aria-label="${money(sp)} of ${money(inc)} income planned for spending, ${over ? money(-left) + " over" : money(left) + " left to save"}"><span style="width:${spPct}%;background:${over ? "var(--bad)" : "var(--accent)"}"></span><span style="width:${over ? 0 : 100 - spPct}%;background:var(--good)"></span></div>
+      <dl style="margin:0;display:grid;grid-template-columns:1fr auto;gap:6px 12px" class="num">
+        <dt>Income</dt><dd style="margin:0;font-weight:800;text-align:right">${money(inc)}</dd>
+        <dt class="row" style="gap:8px"><span style="width:12px;height:12px;border-radius:3px;background:${over ? "var(--bad)" : "var(--accent)"}" aria-hidden="true"></span>Planned spending</dt><dd style="margin:0;font-weight:800;text-align:right">${money(sp)}</dd>
+        <dt class="row" style="gap:8px"><span style="width:12px;height:12px;border-radius:3px;background:var(--good)" aria-hidden="true"></span>${over ? "Over your income by" : "Left to save"}</dt><dd style="margin:0;font-weight:800;text-align:right;color:${over ? "var(--bad)" : "inherit"}">${money(Math.abs(left))}${inc ? ` <span class="sub small">(${Math.round(Math.abs(left) / inc * 100)}%)</span>` : ""}</dd>
+      </dl>`;
+  }
+
+  function screenAssets() {
+    const r = latest();
+    if (!S.assets.length) return `
+      <div class="page-head"><h1 id="page-title" tabindex="-1">Assets</h1><p class="sub">Everything you own that has a dollar value.</p></div>
+      <section class="card" style="text-align:center;align-items:center;padding-block:32px"><h2>Add your first account</h2><p class="sub" style="max-width:30ch">Start with your everyday bank account. You can add shares, property and super afterwards.</p><button class="btn btn-primary" data-act="add-asset">${I.plus}Add an account</button></section>`;
+    const upd = ui.updating;
+    const total = upd ? S.assets.reduce((s, a) => { const p = parseAmount(ui.draft[a.id] ?? ""); return s + (p.ok ? p.value : 0); }, 0) : totalOf(r);
+    const changed = upd ? S.assets.filter((a) => { const p = parseAmount(ui.draft[a.id] ?? ""); return p.ok && p.value !== balanceOf(a.id); }).length : 0;
+    const groups = GROUPS.map((g) => ({ ...g, items: S.assets.filter((a) => a.group === g.id) })).filter((g) => g.items.length);
+    return `
+      <div class="page-head"><h1 id="page-title" tabindex="-1">Assets</h1>
+        <p class="sub" data-live="asset-total">${r ? `Total <strong class="num" style="color:var(--fg)">${money(total)}</strong>${upd ? " (updating)" : ` · last updated ${dateLong(r.date)}`}` : "You haven't recorded any balances yet."}</p></div>
+      ${upd ? `<div class="callout info" role="region" aria-label="Updating balances">${I.info}<div class="grow"><p class="name">Updating balances for ${dateLong(TODAY)}</p><p class="small sub" data-live="upd-count">Change any amount that's different, then save. ${changed} of ${S.assets.length} changed.</p></div></div>`
+            : `<div class="row" style="flex-wrap:wrap;gap:8px"><button class="btn btn-primary grow" data-act="start-update">${I.edit}Update balances</button><button class="btn btn-outline" data-act="add-asset">${I.plus}Add account</button></div>`}
+      ${groups.map((g) => { const gt = g.items.reduce((s, a) => s + (upd ? (parseAmount(ui.draft[a.id] ?? "").value || 0) : balanceOf(a.id)), 0); return `
+        <section class="card" aria-labelledby="g-${g.id}" style="gap:4px">
+          <div class="row"><h2 id="g-${g.id}" class="grow">${g.label}</h2>${r || upd ? `<span class="num" style="font-weight:800" data-live="gt-${g.id}">${money(gt)}</span>` : ""}</div>
+          <ul class="list" style="list-style:none;margin:0;padding:0">${g.items.map((a) => upd ? `
+            <li class="list-item" style="flex-wrap:wrap"><div class="grow" style="min-width:140px"><label for="bal-${a.id}" class="name">${esc(a.name)}</label><p class="small sub" id="bal-${a.id}-hint">${esc(a.institution)}${r ? ` · was ${money(balanceOf(a.id))}` : ""}</p></div>
+              <div class="input-wrap compact" ${ui.errors[a.id] ? "data-invalid" : ""}><span class="unit" aria-hidden="true">$</span><input id="bal-${a.id}" data-bal="${a.id}" inputmode="decimal" autocomplete="off" value="${esc(ui.draft[a.id] ?? "")}" aria-describedby="bal-${a.id}-hint${ui.errors[a.id] ? " bal-" + a.id + "-err" : ""}" ${ui.errors[a.id] ? 'aria-invalid="true"' : ""}></div>
+              ${ui.errors[a.id] ? `<p class="error" id="bal-${a.id}-err" style="flex-basis:100%">${I.alert}<span>${ui.errors[a.id]}</span></p>` : ""}</li>` : `
+            <li class="list-item"><div class="grow"><p class="name">${esc(a.name)}</p><p class="small sub">${esc(a.institution)}</p></div><span class="num" style="font-weight:700">${r ? money(balanceOf(a.id)) : "No balance yet"}</span><button class="icon-btn" data-asset-menu="${a.id}" aria-label="More options for ${esc(a.name)}">${I.more}</button></li>`).join("")}</ul>
+        </section>`; }).join("")}
+      ${!upd && S.records.length ? `
+      <section class="card" aria-labelledby="hist-h">
+        <h2 id="hist-h">Balance history</h2>
+        <p class="small sub">Each time you save balances, a record is added here. Fix a past record if you typed something wrong.</p>
+        <ul class="list" style="list-style:none;margin:0;padding:0">${S.records.slice().reverse().slice(0, ui.open.hist ? 99 : 4).map((rec) => `<li class="list-item"><div class="grow"><p class="name">${dateLong(rec.date)}</p><p class="small sub num">Net worth ${money(totalOf(rec))}</p></div><button class="icon-btn" data-rec-menu="${rec.id}" aria-label="More options for the ${dateLong(rec.date)} record">${I.more}</button></li>`).join("")}</ul>
+        ${S.records.length > 4 ? `<button class="btn btn-outline" data-act="toggle-hist" aria-expanded="${!!ui.open.hist}">${ui.open.hist ? "Show fewer" : `Show all ${S.records.length} records`}</button>` : ""}
+      </section>` : ""}
+      ${upd ? `<div class="sticky-actions"><div class="row"><button class="btn btn-outline" data-act="cancel-update">Cancel</button><button class="btn btn-primary" data-act="save-update">${I.check}Save balances</button></div></div>` : ""}`;
+  }
+
+  function screenPlan() {
+    const p = ui.planMonth, key = monthKey(p), saved = !!S.plans[key];
+    const inc = incomeTotal(), sp = spendTotal(), over = sp > inc;
+    const prevName = MONTHS[(p.m + 10) % 12];
+    return `
+      <div class="page-head"><h1 id="page-title" tabindex="-1">Monthly plan</h1><p class="sub">Decide where each month's income goes. Whatever you don't plan to spend counts as savings.</p></div>
+      <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div class="row" style="gap:4px"><button class="icon-btn" data-act="prev-month" aria-label="Previous month, ${MONTHS[(p.m + 10) % 12]}">${I.left}</button><h2 aria-live="polite" style="min-width:140px;text-align:center">${monthName(p)}</h2><button class="icon-btn" data-act="next-month" aria-label="Next month, ${MONTHS[p.m % 12]}">${I.right}</button></div>
+        ${chipFor(saved ? "good" : "warn", saved ? "Saved" : "Not saved yet")}
+      </div>
+      ${!saved && S.plan.categories.length ? `<div class="callout info">${I.info}<div class="grow"><p class="name">Filled in from your ${prevName} plan</p><p class="small sub">Change anything that's different this month, then save.</p></div></div>` : ""}
+      <section class="card" aria-labelledby="sum-h" data-live="plan-sum"><h2 id="sum-h" class="eyebrow">Summary</h2>${planMeter(inc, sp)}
+        ${over ? `<p class="error" role="alert">${I.alert}<span>You've planned ${money(sp - inc)} more than your income. Lower a category or add income to save this plan.</span></p>` : ""}</section>
+      <section class="card" aria-labelledby="inc-h" style="gap:4px"><div class="row"><h2 id="inc-h" class="grow">Income</h2><button class="btn btn-outline" data-act="add-income" style="min-height:44px">${I.plus}Add income</button></div>
+        <p class="small sub">Take-home pay after tax.</p>
+        <ul class="list" style="list-style:none;margin:0;padding:0">${S.plan.income.map((i) => `<li class="list-item"><label for="inc-${i.id}" class="grow name">${esc(i.name)}</label><div class="input-wrap compact"><span class="unit" aria-hidden="true">$</span><input id="inc-${i.id}" data-inc="${i.id}" inputmode="decimal" value="${i.amount || ""}" autocomplete="off"></div></li>`).join("")}</ul></section>
+      <section class="card" aria-labelledby="sp-h" style="gap:4px"><div class="row"><h2 id="sp-h" class="grow">Spending</h2><button class="btn btn-outline" data-act="add-cat">${I.plus}Add category</button></div>
+        ${S.plan.categories.length ? "" : `<p class="sub">No spending categories yet. Start with something like Bills or Groceries.</p>`}
+        <ul class="list" style="list-style:none;margin:0;padding:0">${S.plan.categories.map((c) => { const amt = catAmount(c), itemSum = c.items.reduce((s, x) => s + x.amount, 0), rest = amt - itemSum; return `
+          <li style="padding-block:12px;display:flex;flex-direction:column;gap:8px">
+            <div class="row" style="align-items:flex-start"><div class="grow"><label for="cat-${c.id}" class="name">${esc(c.name)}</label><p class="small sub num" data-live="catsub-${c.id}">${c.mode === "percent" ? `${c.value}% of income = <strong style="color:var(--fg)">${money(amt)}</strong>` : "Fixed amount each month"}</p></div>
+              <div class="input-wrap compact" style="width:104px">${c.mode === "amount" ? '<span class="unit" aria-hidden="true">$</span>' : ""}<input id="cat-${c.id}" data-cat="${c.id}" inputmode="decimal" value="${c.value}" autocomplete="off" aria-describedby="cat-${c.id}-unit">${c.mode === "percent" ? '<span class="unit" aria-hidden="true">%</span>' : ""}<span class="sr-only" id="cat-${c.id}-unit">${c.mode === "percent" ? "percent of income" : "dollars"}</span></div>
+              <button class="icon-btn" data-cat-menu="${c.id}" aria-label="More options for ${esc(c.name)}">${I.more}</button></div>
+            ${c.items.length ? `<ul style="list-style:none;margin:0 0 0 12px;padding:0 0 0 12px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:2px" aria-label="Items in ${esc(c.name)}">${c.items.map((x) => `<li class="row small" style="min-height:44px"><span class="grow">${esc(x.name)}</span><span class="num" style="font-weight:700">${money(x.amount)}</span><button class="icon-btn" data-item-del="${c.id}:${x.id}" aria-label="Remove ${esc(x.name)} from ${esc(c.name)}">${I.close}</button></li>`).join("")}
+              <li class="small sub num" style="min-height:32px;display:flex;align-items:center" data-live="rest-${c.id}">${rest >= 0 ? `${money(rest)} not given to an item yet` : `<span style="color:var(--bad);font-weight:800">Items are ${money(-rest)} more than this category</span>`}</li></ul>` : ""}
+            <button class="btn btn-outline" style="align-self:flex-start;min-height:44px" data-add-item="${c.id}">${I.plus}Add item to ${esc(c.name)}</button>
+          </li>`; }).join("")}</ul></section>
+      <div class="sticky-actions">
+        <p class="small" style="color:var(--warn);font-weight:800;text-align:center" data-live="dirty">${ui.planDirty ? "You have unsaved changes" : ""}</p>
+        <button class="btn btn-primary btn-block" data-act="save-plan" ${over ? 'aria-disabled="true"' : ""}>${I.check}Save ${MONTHS[p.m - 1]} plan</button>
+      </div>`;
+  }
+
+  function screenBudgets() {
+    const tot = S.budgets.reduce((a, b) => { const s = budgetStats(b); return { amt: a.amt + b.amount, spent: a.spent + s.spent }; }, { amt: 0, spent: 0 });
+    return `
+      <div class="page-head"><h1 id="page-title" tabindex="-1">Budgets</h1><p class="sub">Money set aside for one occasion, like a trip or a holiday season. Log what you spend to see what's left.</p></div>
+      <button class="btn btn-primary" data-act="add-budget">${I.plus}New budget</button>
+      ${S.budgets.length ? `
+      <section class="card" aria-label="All budgets" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
+        <div><p class="small sub">Set aside</p><p class="num" style="font-weight:800">${money(tot.amt)}</p></div>
+        <div><p class="small sub">Spent</p><p class="num" style="font-weight:800">${money(tot.spent)}</p></div>
+        <div><p class="small sub">Left</p><p class="num" style="font-weight:800;color:${tot.amt - tot.spent < 0 ? "var(--bad)" : "inherit"}">${money(tot.amt - tot.spent)}</p></div>
+      </section>` : `<section class="card"><h2>No budgets yet</h2><p class="sub">Create one for something specific, like "Christmas gifts" with $1,200, and log each purchase against it.</p></section>`}
+      ${S.budgets.map((b) => { const s = budgetStats(b), open = ui.open[b.id]; return `
+        <section class="card" aria-labelledby="b-${b.id}">
+          <div class="row" style="align-items:flex-start"><div class="grow"><h2 id="b-${b.id}">${esc(b.name)}</h2><p class="small sub num">Budget ${money(b.amount)}</p></div>${budgetChip(b, s)}<button class="icon-btn" data-bud-menu="${b.id}" aria-label="More options for ${esc(b.name)}" style="margin:-8px -8px 0 0">${I.more}</button></div>
+          <div class="bar" role="progressbar" aria-label="${esc(b.name)} spending" aria-valuemin="0" aria-valuemax="${b.amount}" aria-valuenow="${Math.min(s.spent, b.amount)}" aria-valuetext="${money(s.spent)} of ${money(b.amount)} spent"><span style="width:${Math.min(100, s.pct)}%;background:${s.left < 0 ? "var(--bad)" : "var(--accent)"}"></span></div>
+          <div class="row small num" style="justify-content:space-between;flex-wrap:wrap;gap:4px"><span>${money(s.spent)} spent (${Math.round(s.pct)}%)</span><strong style="color:${s.left < 0 ? "var(--bad)" : "inherit"}">${s.left < 0 ? money(-s.left) + " over" : money(s.left) + " left"}</strong></div>
+          <div class="row" style="flex-wrap:wrap;gap:8px"><button class="btn btn-primary" data-log="${b.id}">${I.plus}Log expense</button>
+            ${b.expenses.length ? `<button class="btn btn-outline" data-toggle="${b.id}" aria-expanded="${!!open}" aria-controls="ex-${b.id}">${open ? "Hide" : "Show"} ${b.expenses.length} ${b.expenses.length === 1 ? "expense" : "expenses"}</button>` : ""}</div>
+          ${open ? `<ul class="list" id="ex-${b.id}" style="list-style:none;margin:0;padding:0" aria-label="Expenses for ${esc(b.name)}">${b.expenses.map((e) => `<li class="list-item"><div class="grow"><p class="name">${esc(e.name)}</p><p class="small sub">${dateLong(new Date(e.date + "T00:00"))}</p></div><span class="num" style="font-weight:700">${money(e.amount)}</span><button class="icon-btn" data-exp-del="${b.id}:${e.id}" aria-label="Remove ${esc(e.name)}">${I.close}</button></li>`).join("")}</ul>` : ""}
+        </section>`; }).join("")}`;
+  }
+
+  // ---------- Render ----------
+  function render(focusTitle) {
+    const main = document.getElementById("main");
+    const scroll = main.scrollTop;
+    main.innerHTML = { home: screenHome, assets: screenAssets, plan: screenPlan, budgets: screenBudgets }[ui.screen]();
+    document.querySelectorAll("[data-nav]").forEach((b) => b.dataset.nav === ui.screen ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+    const notes = NOTES[ui.screen];
+    document.getElementById("notes-body").innerHTML = `<ul>${notes.map(([t, ref]) => `<li>${esc(t)} <span class="ref">${ref}</span></li>`).join("")}</ul>`;
+    if (focusTitle) { main.scrollTop = 0; document.getElementById("page-title")?.focus(); } else main.scrollTop = scroll;
+  }
+  // Update computed text in place so the button under the pointer is never replaced mid-click.
+  function refreshLive() {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = { home: screenHome, assets: screenAssets, plan: screenPlan, budgets: screenBudgets }[ui.screen]();
+    document.querySelectorAll("#main [data-live]").forEach((el) => { const n = tmp.querySelector(`[data-live="${el.dataset.live}"]`); if (n && n.innerHTML !== el.innerHTML) el.innerHTML = n.innerHTML; });
+    const save = document.querySelector('[data-act="save-plan"]');
+    if (save) spendTotal() > incomeTotal() ? save.setAttribute("aria-disabled", "true") : save.removeAttribute("aria-disabled");
+  }
+  function go(screen) { ui.screen = screen; ui.updating = false; render(true); }
+
+  document.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => go(b.dataset.nav)));
+  document.querySelectorAll('input[name="scenario"]').forEach((r) => r.addEventListener("change", () => {
+    S = r.value === "new" ? seedNew() : seedReturning();
+    ui = { ...ui, screen: "home", updating: false, draft: {}, errors: {}, planDirty: false, open: {} };
+    document.getElementById("toast").hidden = true;
+    render(true); announce(r.value === "new" ? "Showing a brand-new account" : "Showing a returning user");
+  }));
+
+  // ---------- Actions ----------
+  function addAssetDialog() {
+    openDialog("Add an account", `${fieldHTML("f-name", "Account name", { hint: "For example: Everyday account, Home loan offset" })}
+      ${fieldHTML("f-inst", "Bank or provider (optional)", { placeholder: "e.g. CommBank" })}
+      <div class="field"><label for="f-type">Type</label><div class="input-wrap"><select id="f-type" style="flex:1;border:0;background:transparent;min-height:44px;font-weight:700">${GROUPS.map((g) => `<option value="${g.id}">${g.label}</option>`).join("")}</select></div></div>`,
+      `<button class="btn" value="cancel">Cancel</button><button class="btn btn-primary" value="ok">Add account</button>`,
+      (a) => { if (a !== "ok") return; if (!requireName("f-name", "account")) return false;
+        S.assets.push({ id: "a" + Date.now(), name: val("f-name").trim(), institution: val("f-inst").trim() || "Self-managed", group: val("f-type") });
+        render(); toast(val("f-name").trim() + " added"); });
+  }
+  function startUpdate() { ui.updating = true; ui.errors = {}; ui.draft = Object.fromEntries(S.assets.map((a) => [a.id, S.records.length ? String(balanceOf(a.id)) : ""])); render(); document.querySelector("[data-bal]")?.focus(); }
+
+  document.getElementById("main").addEventListener("click", (e) => {
+    const t = e.target.closest("button"); if (!t) return;
+    const d = t.dataset;
+    if (d.go) return go(d.go);
+    if (d.act === "add-asset") return addAssetDialog();
+    if (d.act === "go-assets-update") { ui.screen = "assets"; return startUpdate(); }
+    if (d.act === "go-plan") return go("plan");
+    if (d.act === "start-update") return startUpdate();
+    if (d.act === "toggle-hist") { ui.open.hist = !ui.open.hist; return render(); }
+    if (d.act === "cancel-update") { ui.updating = false; render(); return announce("Update cancelled. Nothing was changed."); }
+    if (d.act === "save-update") {
+      ui.errors = {};
+      const balances = {};
+      S.assets.forEach((a) => { const p = parseAmount(ui.draft[a.id] ?? ""); if (p.empty) ui.errors[a.id] = "Enter a balance. Use 0 if the account is empty."; else if (!p.ok) ui.errors[a.id] = "Use numbers only, like 4654.20."; else balances[a.id] = p.value; });
+      const bad = Object.keys(ui.errors);
+      if (bad.length) { render(); document.getElementById("bal-" + bad[0])?.focus(); return announce(`${bad.length} ${bad.length === 1 ? "balance needs" : "balances need"} fixing before you can save.`); }
+      S.records.push({ id: "r" + Date.now(), date: new Date(TODAY), balances }); ui.updating = false; render(true);
+      return toast("Balances saved for " + dateLong(TODAY));
+    }
+    if (d.assetMenu) {
+      const a = S.assets.find((x) => x.id === d.assetMenu);
+      return openDialog(a.name, `<p class="sub">${esc(a.institution)}</p>`, `<button class="btn" value="rename">${I.edit}Rename</button><button class="btn btn-danger" value="del">Remove account</button>`, (act) => {
+        if (act === "rename") { setTimeout(() => renameDialog("Rename account", a.name, (n) => { a.name = n; render(); toast("Account renamed"); }), 0); }
+        if (act === "del") setTimeout(() => confirmDelete(`Remove ${a.name}?`, `Its balance in all ${S.records.length} history records will be removed too, and your past net worth will change. This can't be undone.`, "Remove account", () => { S.assets = S.assets.filter((x) => x !== a); render(); toast(a.name + " removed"); }), 0);
+      });
+    }
+    if (d.recMenu) {
+      const rec = S.records.find((x) => x.id === d.recMenu);
+      return openDialog(dateLong(rec.date), `<p class="big num">${money(totalOf(rec))}</p><p class="small sub">Net worth on this date</p>`, `<button class="btn" value="edit">${I.edit}Edit balances</button><button class="btn btn-danger" value="del">Delete record</button>`, (act) => {
+        if (act === "edit") toast("Editing past records works like Update balances");
+        if (act === "del") setTimeout(() => confirmDelete("Delete this record?", `The ${dateLong(rec.date)} balances will be removed from your history and chart. This can't be undone.`, "Delete record", () => { S.records = S.records.filter((x) => x !== rec); render(); toast("Record deleted"); }), 0);
+      });
+    }
+    // Plan
+    if (d.act === "prev-month" || d.act === "next-month") { const p = ui.planMonth, n = p.y * 12 + p.m - 1 + (d.act === "next-month" ? 1 : -1); ui.planMonth = { y: Math.floor(n / 12), m: n % 12 + 1 }; render(); return; }
+    if (d.act === "save-plan") {
+      if (spendTotal() > incomeTotal()) { document.querySelector('[role="alert"]')?.scrollIntoView({ block: "center" }); return announce("Can't save yet. You've planned more than your income."); }
+      if (!incomeTotal()) return toast("Enter your take-home pay first");
+      S.plans[monthKey(ui.planMonth)] = true; ui.planDirty = false; render(); return toast(monthName(ui.planMonth) + " plan saved");
+    }
+    if (d.act === "add-income") return renameDialog("Add income", "", (n) => { S.plan.income.push({ id: "i" + Date.now(), name: n, amount: 0 }); ui.planDirty = true; render(); toast(n + " added. Enter its amount."); }, "Income name", "For example: Partner's salary, Rental income");
+    if (d.act === "add-cat") return openDialog("Add spending category", `${fieldHTML("f-name", "Category name", { hint: "For example: Bills, Groceries, Transport" })}
+        <fieldset style="border:0;padding:0;margin:0;display:flex;flex-direction:column;gap:6px"><legend class="label">How do you want to plan it?</legend>
+        <label class="row" style="min-height:44px"><input type="radio" name="f-mode" value="percent" checked style="width:20px;height:20px"> A share of income (%)</label>
+        <label class="row" style="min-height:44px"><input type="radio" name="f-mode" value="amount" style="width:20px;height:20px"> A fixed amount ($)</label></fieldset>
+        ${fieldHTML("f-val", "Amount each month", { hint: "Enter a % or a dollar amount, depending on your choice above" })}`,
+      `<button class="btn" value="cancel">Cancel</button><button class="btn btn-primary" value="ok">Add category</button>`, (a) => {
+        if (a !== "ok") return; const okName = requireName("f-name", "category"); const v = requireAmount("f-val"); if (!okName || v === null) return false;
+        const mode = form.querySelector('input[name="f-mode"]:checked').value;
+        if (mode === "percent" && v > 100) { setError("f-val", "A share of income can't be more than 100%."); return false; }
+        S.plan.categories.push({ id: "c" + Date.now(), name: val("f-name").trim(), mode, value: v, items: [] }); ui.planDirty = true; render(); toast(val("f-name").trim() + " added"); });
+    if (d.addItem) { const c = S.plan.categories.find((x) => x.id === d.addItem);
+      return openDialog(`Add item to ${c.name}`, `${fieldHTML("f-name", "Item name", { hint: "For example: Rent, Phone, Streaming" })}${fieldHTML("f-val", "Amount each month", { unit: "$", mode: "decimal" })}`,
+        `<button class="btn" value="cancel">Cancel</button><button class="btn btn-primary" value="ok">Add item</button>`, (a) => {
+          if (a !== "ok") return; const okName = requireName("f-name", "item"); const v = requireAmount("f-val"); if (!okName || v === null) return false;
+          c.items.push({ id: "x" + Date.now(), name: val("f-name").trim(), amount: v }); ui.planDirty = true; render(); toast(val("f-name").trim() + " added to " + c.name); }); }
+    if (d.itemDel) { const [cid, xid] = d.itemDel.split(":"); const c = S.plan.categories.find((x) => x.id === cid), i = c.items.findIndex((x) => x.id === xid), item = c.items[i];
+      c.items.splice(i, 1); ui.planDirty = true; render(); return toast(item.name + " removed", () => { c.items.splice(i, 0, item); }); }
+    if (d.catMenu) { const c = S.plan.categories.find((x) => x.id === d.catMenu);
+      return openDialog(c.name, `<p class="sub">${c.mode === "percent" ? c.value + "% of income" : money(c.value) + " each month"}</p>`,
+        `<button class="btn" value="rename">${I.edit}Rename</button><button class="btn" value="mode">Switch to ${c.mode === "percent" ? "fixed $" : "% of income"}</button><button class="btn btn-danger" value="del">Delete category</button>`, (act) => {
+          if (act === "rename") setTimeout(() => renameDialog("Rename category", c.name, (n) => { c.name = n; ui.planDirty = true; render(); toast("Category renamed"); }), 0);
+          if (act === "mode") { const amt = catAmount(c); c.mode = c.mode === "percent" ? "amount" : "percent"; c.value = c.mode === "amount" ? amt : Math.round(amt / incomeTotal() * 1000) / 10; ui.planDirty = true; render(); toast(`${c.name} now uses ${c.mode === "amount" ? "a fixed amount" : "a share of income"}. The total stayed the same.`); }
+          if (act === "del") setTimeout(() => confirmDelete(`Delete ${c.name}?`, `${c.name} and its ${c.items.length} items will be removed from every month's plan. Past saved months keep their totals.`, "Delete category", () => { S.plan.categories = S.plan.categories.filter((x) => x !== c); ui.planDirty = true; render(); toast(c.name + " deleted"); }), 0);
+        }); }
+    // Budgets
+    if (d.act === "add-budget") return openDialog("New budget", `${fieldHTML("f-name", "What is it for?", { hint: "For example: Christmas gifts, Japan trip" })}${fieldHTML("f-val", "How much are you setting aside?", { unit: "$", mode: "decimal" })}`,
+      `<button class="btn" value="cancel">Cancel</button><button class="btn btn-primary" value="ok">Create budget</button>`, (a) => {
+        if (a !== "ok") return; const okName = requireName("f-name", "budget"); const v = requireAmount("f-val"); if (!okName || v === null) return false;
+        S.budgets.push({ id: "g" + Date.now(), name: val("f-name").trim(), amount: v, expenses: [] }); render(); toast(val("f-name").trim() + " created"); });
+    if (d.toggle) { ui.open[d.toggle] = !ui.open[d.toggle]; return render(); }
+    if (d.log) { const b = S.budgets.find((x) => x.id === d.log), s = budgetStats(b);
+      return openDialog("Log expense", `${fieldHTML("f-name", "What did you buy?")}${fieldHTML("f-val", "Amount", { unit: "$", mode: "decimal" })}
+        <div class="field"><label for="f-date">Date</label><div class="input-wrap"><input id="f-date" type="date" value="2026-10-09"></div></div>`,
+        `<button class="btn" value="cancel">Cancel</button><button class="btn btn-primary" value="ok">Log expense</button>`, (a) => {
+          if (a !== "ok") return; const okName = requireName("f-name", "expense"); const v = requireAmount("f-val"); if (!okName || v === null) return false;
+          b.expenses.unshift({ id: "e" + Date.now(), name: val("f-name").trim(), amount: v, date: val("f-date") || "2026-10-09" }); ui.open[b.id] = true; render();
+          const left = budgetStats(b).left; toast(`Logged. ${b.name} has ${left < 0 ? money(-left) + " over" : money(left) + " left"}.`); },
+        `For ${esc(b.name)}. ${s.left < 0 ? money(-s.left) + " over budget" : money(s.left) + " left"}.`); }
+    if (d.expDel) { const [bid, eid] = d.expDel.split(":"); const b = S.budgets.find((x) => x.id === bid), i = b.expenses.findIndex((x) => x.id === eid), ex = b.expenses[i];
+      b.expenses.splice(i, 1); render(); return toast(ex.name + " removed", () => b.expenses.splice(i, 0, ex)); }
+    if (d.budMenu) { const b = S.budgets.find((x) => x.id === d.budMenu);
+      return openDialog(b.name, `<p class="sub num">Budget ${money(b.amount)}</p>`, `<button class="btn" value="edit">${I.edit}Edit</button><button class="btn btn-danger" value="del">Delete budget</button>`, (act) => {
+        if (act === "edit") setTimeout(() => openDialog("Edit budget", `${fieldHTML("f-name", "Name", { value: b.name })}${fieldHTML("f-val", "Amount set aside", { unit: "$", mode: "decimal", value: b.amount })}`,
+          `<button class="btn" value="cancel">Cancel</button><button class="btn btn-primary" value="ok">Save changes</button>`, (a) => {
+            if (a !== "ok") return; const okName = requireName("f-name", "budget"); const v = requireAmount("f-val"); if (!okName || v === null) return false;
+            b.name = val("f-name").trim(); b.amount = v; render(); toast("Budget updated"); }), 0);
+        if (act === "del") setTimeout(() => confirmDelete(`Delete ${b.name}?`, b.expenses.length ? `Its ${b.expenses.length} logged expenses (${money(budgetStats(b).spent)}) will be deleted too. This can't be undone.` : "This can't be undone.", "Delete budget", () => { S.budgets = S.budgets.filter((x) => x !== b); render(); toast(b.name + " deleted"); }), 0);
+      }); }
+  });
+
+  function renameDialog(title, current, onSave, label = "Name", hint = "") {
+    openDialog(title, fieldHTML("f-name", label, { value: current, hint }), `<button class="btn" value="cancel">Cancel</button><button class="btn btn-primary" value="ok">Save</button>`,
+      (a) => { if (a !== "ok") return; if (!requireName("f-name", "item")) return false; onSave(val("f-name").trim()); });
+  }
+
+  // Live inputs (no re-render while typing, except totals on blur)
+  document.getElementById("main").addEventListener("input", (e) => {
+    const t = e.target, d = t.dataset;
+    if (d.bal) { ui.draft[d.bal] = t.value; if (ui.errors[d.bal]) { delete ui.errors[d.bal]; t.removeAttribute("aria-invalid"); t.setAttribute("aria-describedby", t.id + "-hint"); t.closest(".input-wrap").removeAttribute("data-invalid"); document.getElementById(t.id + "-err")?.remove(); } }
+    if (d.inc) { const p = parseAmount(t.value); S.plan.income.find((x) => x.id === d.inc).amount = p.ok ? p.value : 0; ui.planDirty = true; refreshLive(); }
+    if (d.cat) { const p = parseAmount(t.value); const c = S.plan.categories.find((x) => x.id === d.cat); c.value = p.ok ? p.value : 0; ui.planDirty = true; refreshLive(); }
+  });
+  document.getElementById("main").addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.name === "hz") { ui.horizon = +t.value; render(); document.querySelector(`input[name="hz"][value="${t.value}"]`)?.focus(); announce(`Showing a ${t.value} year forecast`); return; }
+    if (t.dataset.bal || t.dataset.inc || t.dataset.cat) refreshLive();
+  });
+  document.getElementById("share-btn").addEventListener("click", () => openDialog("Household members",
+    `<ul class="list" style="list-style:none;margin:0;padding:0">${S.members.map((m) => `<li class="list-item"><span class="step-dot" aria-hidden="true">${m.name.split(" ").map((w) => w[0]).join("")}</span><div class="grow"><p class="name">${esc(m.name)}${m.you ? " (you)" : ""}</p><p class="small sub">${esc(m.email)}</p></div><span class="chip neutral">${m.role}</span></li>`).join("")}</ul>
+     ${fieldHTML("f-email", "Add someone by email", { type: "email", mode: "email", hint: "They'll see and edit everything here once they sign in with this Google address. We don't send them an email, so let them know yourself." })}`,
+    `<button class="btn" value="cancel">Close</button><button class="btn btn-primary" value="ok">Give access</button>`,
+    (a) => { if (a !== "ok") return; const v = val("f-email").trim(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { setError("f-email", "Enter a full email address, like sam@example.com."); return false; }
+      S.members.push({ name: v, email: v, role: "Waiting to sign in" }); toast(v + " can now sign in to see this account"); },
+    "Everyone listed here shares the same assets, plans and budgets."));
+
+  render();
+})();
+</script>
