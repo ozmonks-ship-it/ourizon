@@ -62,8 +62,8 @@ export function AppLayout({
   }, [screen]);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background">
-      <header className="shrink-0 border-b border-border bg-card/50 backdrop-blur-sm">
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
+      <header className="shrink-0 border-b border-border bg-card/50 pt-[env(safe-area-inset-top)] backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2">
             <OurizonLogo size={30} />
@@ -75,7 +75,7 @@ export function AppLayout({
         </div>
       </header>
 
-      <main ref={mainRef} tabIndex={-1} className="flex-1 overflow-y-auto scroll-smooth focus:outline-none">
+      <main ref={mainRef} tabIndex={-1} className="relative flex-1 overflow-y-auto overscroll-contain scroll-smooth focus:outline-none">
         <div className="mx-auto max-w-3xl px-4 pt-6 pb-8">{children}</div>
       </main>
 
