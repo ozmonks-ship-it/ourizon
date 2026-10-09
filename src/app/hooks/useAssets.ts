@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { AssetGroupId, AssetWithBalance, NetWorthPoint } from "@/lib/supabase/database.types";
 import {
@@ -15,6 +15,13 @@ import {
   updateBalanceSnapshot,
   type SnapshotWithEntries,
 } from "../lib/assetsApi";
+import { readCache, trackBusy, writeCache } from "../lib/dataCache";
+
+interface AssetsCache {
+  ownerId: string;
+  rawAssets: Awaited<ReturnType<typeof fetchAssets>>;
+  snapshots: SnapshotWithEntries[];
+}
 
 interface UseAssetsResult {
   loading: boolean;
@@ -36,42 +43,45 @@ interface UseAssetsResult {
 }
 
 export function useAssets(session: Session | null): UseAssetsResult {
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `assets:${session?.user.id ?? ""}`;
+  const [cached] = useState(() => readCache<AssetsCache>(cacheKey));
+  const [loading, setLoading] = useState(!cached);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [assets, setAssets] = useState<AssetWithBalance[]>([]);
-  const [netWorthHistory, setNetWorthHistory] = useState<NetWorthPoint[]>([]);
-  const [snapshots, setSnapshots] = useState<SnapshotWithEntries[]>([]);
-  const [rawAssets, setRawAssets] = useState<Awaited<ReturnType<typeof fetchAssets>>>([]);
-  const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(null);
+  const [snapshots, setSnapshots] = useState<SnapshotWithEntries[]>(cached?.snapshots ?? []);
+  const [rawAssets, setRawAssets] = useState<Awaited<ReturnType<typeof fetchAssets>>>(cached?.rawAssets ?? []);
+  const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(cached?.ownerId ?? null);
+  const assets = useMemo(() => buildAssetsWithBalances(rawAssets, snapshots), [rawAssets, snapshots]);
+  const netWorthHistory = useMemo(() => buildNetWorthHistory(snapshots), [snapshots]);
+  const hasData = useRef(Boolean(cached));
 
   const refresh = useCallback(async () => {
     if (!session?.user.id) {
-      setAssets([]);
       setRawAssets([]);
-      setNetWorthHistory([]);
       setSnapshots([]);
       setBudgetOwnerId(null);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    // With data already on screen, refresh quietly instead of showing a loader.
+    if (!hasData.current) setLoading(true);
     setError(null);
 
     try {
-      const ownerId = await resolveBudgetOwnerId(session.user.id);
+      const { ownerId, assetRows, snapshotRows } = await trackBusy(
+        (async () => {
+          const ownerId = await resolveBudgetOwnerId(session.user.id);
+          const [assetRows, snapshotRows] = await Promise.all([fetchAssets(ownerId), fetchSnapshots(ownerId)]);
+          return { ownerId, assetRows, snapshotRows };
+        })(),
+      );
+
       setBudgetOwnerId(ownerId);
-
-      const [assetRows, snapshotRows] = await Promise.all([
-        fetchAssets(ownerId),
-        fetchSnapshots(ownerId),
-      ]);
-
       setSnapshots(snapshotRows);
       setRawAssets(assetRows);
-      setAssets(buildAssetsWithBalances(assetRows, snapshotRows));
-      setNetWorthHistory(buildNetWorthHistory(snapshotRows));
+      hasData.current = true;
+      writeCache<AssetsCache>(`assets:${session.user.id}`, { ownerId, rawAssets: assetRows, snapshots: snapshotRows });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load assets");
     } finally {

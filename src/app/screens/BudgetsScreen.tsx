@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "../components/ui/input";
 import { btnOutline, btnPrimary, iconBtn } from "../components/ui/buttonStyles";
 import { ActionSheet, ConfirmDialog, Field, MoneyInput, StatusChip, describedBy } from "../components/ui/kit";
-import { PageLoader } from "../components/PageLoader";
+import { ScreenSkeleton } from "../components/ScreenSkeleton";
 import { useToast } from "../components/Toast";
 import { useBudgets } from "../hooks/useBudgets";
 import { fmt, fmtDate, toInputValue } from "../lib/format";
@@ -35,11 +35,11 @@ export function BudgetsScreen({ session }: BudgetsScreenProps) {
   const [expenseToDelete, setExpenseToDelete] = useState<BudgetExpense | null>(null);
 
   if (loading) {
-    return <PageLoader />;
+    return <ScreenSkeleton title="Budgets" shape="budgets" />;
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="screen-enter flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h1 tabIndex={-1} className="text-2xl font-semibold text-foreground focus:outline-none">
           Budgets

@@ -28,6 +28,7 @@ The app targets WCAG 2.2 AA. Keep to these conventions when adding UI:
 - Money fields use `MoneyInput`; forms show inline errors with `Field` / `FieldError` (`src/app/components/ui/kit.tsx`).
 - Deletes go through `ConfirmDialog`; confirmations use `useToast()` so screen readers hear them.
 - Show state with words and an icon (`StatusChip`), not colour alone.
+- Don't use the full-page `PageLoader` inside the app; it's only for start-up. Data hooks cache through `src/app/lib/dataCache.ts` and refresh in the background (`trackBusy` drives the bar under the header). A screen's first load renders `ScreenSkeleton`, and content that's being replaced stays visible with `.is-stale` and `inert`.
 
 See [`docs/ux-audit/`](docs/ux-audit/) for the audit these follow from.
 

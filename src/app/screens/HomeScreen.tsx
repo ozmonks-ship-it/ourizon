@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { ArrowDown, ArrowUp, Check } from "lucide-react";
 import { ChartLegend, ForecastChart } from "../components/ForecastChart";
-import { PageLoader } from "../components/PageLoader";
+import { ScreenSkeleton } from "../components/ScreenSkeleton";
 import { PlanMeter } from "../components/PlanMeter";
 import type { NavScreen } from "../components/AppLayout";
 import { btnLink, btnOutline, btnPrimary } from "../components/ui/buttonStyles";
@@ -47,7 +47,7 @@ export function HomeScreen({ session, onNavigate }: HomeScreenProps) {
   }, [assets]);
 
   if (assetsLoading || planLoading || budgetsLoading) {
-    return <PageLoader />;
+    return <ScreenSkeleton title={`${greeting}, ${firstName}`} shape="home" />;
   }
 
   if (!hasAssets || !hasSnapshots) {
@@ -69,7 +69,7 @@ export function HomeScreen({ session, onNavigate }: HomeScreenProps) {
   const monthName = fmtMonthName(year, month);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="screen-enter flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h1 tabIndex={-1} className="text-2xl font-semibold text-foreground focus:outline-none">
           {greeting}, {firstName}
@@ -339,7 +339,7 @@ function GettingStarted({
   const next = steps.findIndex((step) => !step.done);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="screen-enter flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h1 tabIndex={-1} className="text-2xl font-semibold text-foreground focus:outline-none">
           Welcome to Ourizon, {firstName}

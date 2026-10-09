@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import type { AllocationMode, Bucket, BucketKind } from "@/lib/supabase/database.types";
 import { calculateAllocationSummary, type BucketAllocationInput } from "../lib/bucketAllocation";
@@ -6,11 +6,11 @@ import {
   buildDraftFromServer,
   clearDraftSnapshot,
   loadDraftSnapshot,
-  mergeDraftWithBuckets,
   restoreDraftSnapshot,
   saveDraftSnapshot,
 } from "../lib/logDraftStorage";
 import { periodKey } from "../lib/forecast";
+import { readCache, trackBusy, writeCache } from "../lib/dataCache";
 import {
   createBucket,
   deleteBucket,
@@ -112,8 +112,45 @@ async function buildCarryForward(
   };
 }
 
+/** What a month's plan looked like when last loaded, so revisits are instant. */
+interface LogPeriodCache {
+  ownerId: string;
+  buckets: Bucket[];
+  savedPeriods: string[];
+  carryForward: CarryForwardSnapshot | null;
+  base: { draftValues: Record<string, string>; netIncomeDraft: string };
+}
+
+const logCacheKey = (userId: string, year: number, month: number) => `log:${userId}:${periodKey(year, month)}`;
+
+/** The server values for a month with any unsaved local edits applied on top. */
+function draftWithStored(
+  userId: string,
+  year: number,
+  month: number,
+  base: { draftValues: Record<string, string>; netIncomeDraft: string },
+  bucketRows: Bucket[],
+  carried: CarryForwardSnapshot | null,
+): { draftValues: Record<string, string>; netIncomeDraft: string } {
+  const stored = loadDraftSnapshot(userId, year, month);
+  if (!stored) return { draftValues: { ...base.draftValues }, netIncomeDraft: base.netIncomeDraft };
+  const restored = restoreDraftSnapshot(base, stored, bucketRows);
+  if (carried) {
+    // Older drafts left fields blank to mean "use last month's value".
+    for (const bucket of bucketRows) {
+      if ((restored.draftValues[bucket.id] ?? "").trim() === "") {
+        restored.draftValues[bucket.id] = carried.values[bucket.id] ?? "";
+      }
+    }
+    if (restored.netIncomeDraft.trim() === "") restored.netIncomeDraft = carried.netIncome;
+  }
+  return restored;
+}
+
 interface UseLogResult {
   loading: boolean;
+  /** True while another month's plan loads; the previous month stays on screen. */
+  periodLoading: boolean;
   saving: boolean;
   savingBucket: boolean;
   savingLog: boolean;
@@ -159,25 +196,48 @@ interface UseLogResult {
 }
 
 export function useLog(session: Session | null): UseLogResult {
-  const [selectedPeriod, setSelectedPeriodState] = useState(currentPeriod);
+  const userId = session?.user.id;
+  const [initialPeriod] = useState(currentPeriod);
+  const [initial] = useState(() => {
+    if (!userId) return null;
+    const cached = readCache<LogPeriodCache>(logCacheKey(userId, initialPeriod.year, initialPeriod.month));
+    if (!cached) return null;
+    return {
+      cached,
+      draft: draftWithStored(userId, initialPeriod.year, initialPeriod.month, cached.base, cached.buckets, cached.carryForward),
+    };
+  });
+  const [selectedPeriod, setSelectedPeriodState] = useState(initialPeriod);
   const { year, month } = selectedPeriod;
   const monthLabel = new Date(year, month - 1, 1).toLocaleString("en-AU", {
     month: "long",
     year: "numeric",
   });
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initial);
   const [savingBucket, setSavingBucket] = useState(false);
   const [savingLog, setSavingLog] = useState(false);
   const saving = savingBucket || savingLog;
   const [error, setError] = useState<string | null>(null);
-  const [buckets, setBuckets] = useState<Bucket[]>([]);
-  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
-  const [netIncomeDraft, setNetIncomeDraft] = useState("");
-  const [carryForward, setCarryForward] = useState<CarryForwardSnapshot | null>(null);
+  const [buckets, setBuckets] = useState<Bucket[]>(initial?.cached.buckets ?? []);
+  const [draftValues, setDraftValues] = useState<Record<string, string>>(initial?.draft.draftValues ?? {});
+  const [netIncomeDraft, setNetIncomeDraft] = useState(initial?.draft.netIncomeDraft ?? "");
+  const [carryForward, setCarryForward] = useState<CarryForwardSnapshot | null>(initial?.cached.carryForward ?? null);
   const [saved, setSaved] = useState(false);
-  const [savedPeriods, setSavedPeriods] = useState<ReadonlySet<string>>(new Set());
-  const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(null);
+  const [savedPeriods, setSavedPeriods] = useState<ReadonlySet<string>>(new Set(initial?.cached.savedPeriods ?? []));
+  const [budgetOwnerId, setBudgetOwnerId] = useState<string | null>(initial?.cached.ownerId ?? null);
+  // The month whose values are on screen. Differs from the selected month while it loads.
+  const [loadedPeriod, setLoadedPeriodState] = useState<string | null>(
+    initial ? periodKey(initialPeriod.year, initialPeriod.month) : null,
+  );
+  const loadedPeriodRef = useRef(loadedPeriod);
+  const setLoadedPeriod = useCallback((value: string | null) => {
+    loadedPeriodRef.current = value;
+    setLoadedPeriodState(value);
+  }, []);
+  // Set when the user changes a value, so a background refresh doesn't overwrite it.
+  const editedRef = useRef(false);
+  const requestRef = useRef(0);
 
   const incomeBuckets = useMemo(
     () => buckets.filter((b) => b.kind === "income"),
@@ -202,7 +262,7 @@ export function useLog(session: Session | null): UseLogResult {
   }, [buckets]);
   const hasIncomeBuckets = incomeBuckets.length > 0;
   const isCurrentPeriodSaved = savedPeriods.has(periodKey(year, month));
-  const userId = session?.user.id;
+  const periodLoading = !loading && loadedPeriod !== periodKey(year, month);
 
   const applyDraftSnapshot = useCallback(
     (snapshot: { draftValues: Record<string, string>; netIncomeDraft: string }) => {
@@ -212,96 +272,123 @@ export function useLog(session: Session | null): UseLogResult {
     [],
   );
 
-  const refresh = useCallback(
-    async (options?: { preserveDrafts?: boolean }) => {
-      if (!userId) {
-        setBuckets([]);
-        setDraftValues({});
-        setNetIncomeDraft("");
-        setCarryForward(null);
-        setBudgetOwnerId(null);
-        setSavedPeriods(new Set());
-        setLoading(false);
-        return;
-      }
-
-      if (!options?.preserveDrafts) {
-        setLoading(true);
-      }
-      setError(null);
-
-      try {
-        const ownerId = await resolveBudgetOwnerId(userId);
-        setBudgetOwnerId(ownerId);
-
-        const monthlyLogs = await fetchMonthlyLogs(ownerId);
-        setSavedPeriods(
-          new Set(monthlyLogs.map((log) => periodKey(log.year, log.month))),
-        );
-
-        let bucketRows = await fetchBuckets(ownerId);
-        if (bucketRows.length === 0) {
-          await seedDefaultBuckets();
-          bucketRows = await fetchBuckets(ownerId);
-        }
-
-        setBuckets(bucketRows);
-
-        if (options?.preserveDrafts) {
-          const log = await fetchMonthlyLog(ownerId, year, month);
-          const entryMap = new Map(
-            (log?.monthly_log_entries ?? []).map((e) => [e.bucket_id, e]),
-          );
-          setDraftValues((prev) => mergeDraftWithBuckets(prev, bucketRows, entryMap));
-          return;
-        }
-
-        const log = await fetchMonthlyLog(ownerId, year, month);
-        const entryMap = new Map(
-          (log?.monthly_log_entries ?? []).map((e) => [e.bucket_id, e]),
-        );
-
-        // For an unsaved month, pre-fill the previous saved month's values so the
-        // user can fine-tune instead of starting from scratch.
-        const carried = log ? null : await buildCarryForward(ownerId, monthlyLogs, year, month);
-        setCarryForward(carried);
-
-        const baseSnapshot = log
-          ? buildDraftFromServer(bucketRows, log.net_income ?? 0, entryMap)
-          : carried
-            ? draftFromCarryForward(bucketRows, carried)
-            : buildDraftFromServer(bucketRows, 0, entryMap);
-        const stored = loadDraftSnapshot(userId, year, month);
-        const restored = stored ? restoreDraftSnapshot(baseSnapshot, stored, bucketRows) : baseSnapshot;
-        if (stored && carried) {
-          // Older drafts left fields blank to mean "use last month's value".
-          for (const bucket of bucketRows) {
-            if ((restored.draftValues[bucket.id] ?? "").trim() === "") {
-              restored.draftValues[bucket.id] = carried.values[bucket.id] ?? "";
-            }
-          }
-          if (restored.netIncomeDraft.trim() === "") restored.netIncomeDraft = carried.netIncome;
-        }
-        applyDraftSnapshot(restored);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load log");
-      } finally {
-        if (!options?.preserveDrafts) {
-          setLoading(false);
-        }
-      }
+  /** Show a month's cached plan straight away, if there is one. */
+  const applyCached = useCallback(
+    (nextYear: number, nextMonth: number): boolean => {
+      if (!userId) return false;
+      const cached = readCache<LogPeriodCache>(logCacheKey(userId, nextYear, nextMonth));
+      if (!cached) return false;
+      setBudgetOwnerId(cached.ownerId);
+      setBuckets(cached.buckets);
+      setSavedPeriods(new Set(cached.savedPeriods));
+      setCarryForward(cached.carryForward);
+      applyDraftSnapshot(draftWithStored(userId, nextYear, nextMonth, cached.base, cached.buckets, cached.carryForward));
+      editedRef.current = false;
+      setLoadedPeriod(periodKey(nextYear, nextMonth));
+      return true;
     },
-    [userId, year, month, applyDraftSnapshot],
+    [userId, applyDraftSnapshot, setLoadedPeriod],
   );
+
+  const refresh = useCallback(async () => {
+    if (!userId) {
+      setBuckets([]);
+      setDraftValues({});
+      setNetIncomeDraft("");
+      setCarryForward(null);
+      setBudgetOwnerId(null);
+      setSavedPeriods(new Set());
+      setLoadedPeriod(null);
+      setLoading(false);
+      return;
+    }
+
+    const request = ++requestRef.current;
+    const pk = periodKey(year, month);
+    // Only the very first load shows placeholders. After that the previous values
+    // stay on screen (dimmed when the month changes) while this one loads.
+    if (loadedPeriodRef.current === null) setLoading(true);
+    setError(null);
+
+    try {
+      const result = await trackBusy(
+        (async () => {
+          const ownerId = await resolveBudgetOwnerId(userId);
+          const monthlyLogs = await fetchMonthlyLogs(ownerId);
+          let bucketRows = await fetchBuckets(ownerId);
+          if (bucketRows.length === 0) {
+            await seedDefaultBuckets();
+            bucketRows = await fetchBuckets(ownerId);
+          }
+          const log = await fetchMonthlyLog(ownerId, year, month);
+          // For an unsaved month, pre-fill the previous saved month's values so the
+          // user can fine-tune instead of starting from scratch.
+          const carried = log ? null : await buildCarryForward(ownerId, monthlyLogs, year, month);
+          return { ownerId, monthlyLogs, bucketRows, log, carried };
+        })(),
+      );
+      // A newer month was picked while this one loaded; let that request win.
+      if (request !== requestRef.current) return;
+
+      const { ownerId, monthlyLogs, bucketRows, log, carried } = result;
+      const entryMap = new Map((log?.monthly_log_entries ?? []).map((e) => [e.bucket_id, e]));
+      const base = log
+        ? buildDraftFromServer(bucketRows, log.net_income ?? 0, entryMap)
+        : carried
+          ? draftFromCarryForward(bucketRows, carried)
+          : buildDraftFromServer(bucketRows, 0, entryMap);
+      const savedList = monthlyLogs.map((entry) => periodKey(entry.year, entry.month));
+
+      setBudgetOwnerId(ownerId);
+      setSavedPeriods(new Set(savedList));
+      setBuckets(bucketRows);
+      setCarryForward(carried);
+
+      if (loadedPeriodRef.current !== pk || !editedRef.current) {
+        applyDraftSnapshot(draftWithStored(userId, year, month, base, bucketRows, carried));
+        editedRef.current = false;
+      } else {
+        // Keep what the user is typing; just add any buckets that are new.
+        setDraftValues((prev) => {
+          const next = { ...prev };
+          for (const bucket of bucketRows) {
+            if (!(bucket.id in next)) next[bucket.id] = base.draftValues[bucket.id] ?? "";
+          }
+          return next;
+        });
+      }
+      setLoadedPeriod(pk);
+      writeCache<LogPeriodCache>(logCacheKey(userId, year, month), {
+        ownerId,
+        buckets: bucketRows,
+        savedPeriods: savedList,
+        carryForward: carried,
+        base,
+      });
+    } catch (err) {
+      if (request === requestRef.current) setError(err instanceof Error ? err.message : "Failed to load log");
+    } finally {
+      if (request === requestRef.current) setLoading(false);
+    }
+  }, [userId, year, month, applyDraftSnapshot, setLoadedPeriod]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
-    if (!userId || loading) return;
+    // Only persist drafts for the month that's actually on screen.
+    if (!userId || loading || loadedPeriod !== periodKey(year, month)) return;
     saveDraftSnapshot(userId, year, month, { draftValues, netIncomeDraft });
-  }, [userId, year, month, draftValues, netIncomeDraft, loading]);
+  }, [userId, year, month, draftValues, netIncomeDraft, loading, loadedPeriod]);
+
+  // Keep the cached bucket list in step with adds, edits and deletes.
+  useEffect(() => {
+    if (!userId || loadedPeriod !== periodKey(year, month)) return;
+    const key = logCacheKey(userId, year, month);
+    const cached = readCache<LogPeriodCache>(key);
+    if (cached) writeCache<LogPeriodCache>(key, { ...cached, buckets, savedPeriods: [...savedPeriods] });
+  }, [userId, year, month, loadedPeriod, buckets, savedPeriods]);
 
   const allocationInputs = useMemo((): {
     income: BucketAllocationInput[];
@@ -343,11 +430,13 @@ export function useLog(session: Session | null): UseLogResult {
   );
 
   const setDraftValue = useCallback((bucketId: string, value: string) => {
+    editedRef.current = true;
     setDraftValues((prev) => ({ ...prev, [bucketId]: value }));
     setSaved(false);
   }, []);
 
   const handleSetNetIncomeDraft = useCallback((value: string) => {
+    editedRef.current = true;
     setNetIncomeDraft(value);
     setSaved(false);
   }, []);
@@ -467,17 +556,17 @@ export function useLog(session: Session | null): UseLogResult {
     }
   }, [buckets]);
 
-  const setSelectedPeriod = useCallback((nextYear: number, nextMonth: number) => {
-    // Selecting the month that's already active is a no-op. Skipping avoids
-    // flipping `loading` on without a matching refresh (the refresh effect keys
-    // off year/month, so it wouldn't re-run to turn loading back off).
-    if (selectedPeriod.year === nextYear && selectedPeriod.month === nextMonth) {
-      return;
-    }
-    setLoading(true);
-    setSelectedPeriodState({ year: nextYear, month: nextMonth });
-    setSaved(false);
-  }, [selectedPeriod]);
+  const setSelectedPeriod = useCallback(
+    (nextYear: number, nextMonth: number) => {
+      if (selectedPeriod.year === nextYear && selectedPeriod.month === nextMonth) return;
+      setSelectedPeriodState({ year: nextYear, month: nextMonth });
+      setSaved(false);
+      // A month seen before appears at once; otherwise the current one stays,
+      // dimmed, until the new month arrives (see periodLoading).
+      applyCached(nextYear, nextMonth);
+    },
+    [selectedPeriod, applyCached],
+  );
 
   const removeMonthlyLog = useCallback(async () => {
     if (!budgetOwnerId) return;
@@ -500,13 +589,16 @@ export function useLog(session: Session | null): UseLogResult {
         carried ? draftFromCarryForward(buckets, carried) : buildDraftFromServer(buckets, 0, new Map()),
       );
       setSaved(false);
+      // Refresh quietly so the cached copy of this month matches the server again.
+      editedRef.current = false;
+      void refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete log");
       throw err;
     } finally {
       setSavingLog(false);
     }
-  }, [budgetOwnerId, year, month, userId, buckets, applyDraftSnapshot]);
+  }, [budgetOwnerId, year, month, userId, buckets, applyDraftSnapshot, refresh]);
 
   const saveBuckets = useCallback(async () => {
     setSavingLog(true);
@@ -531,6 +623,16 @@ export function useLog(session: Session | null): UseLogResult {
 
       // The pre-filled values are now this month's saved values.
       setCarryForward(null);
+      editedRef.current = false;
+      if (userId && budgetOwnerId) {
+        writeCache<LogPeriodCache>(logCacheKey(userId, year, month), {
+          ownerId: budgetOwnerId,
+          buckets,
+          savedPeriods: [...savedPeriods, periodKey(year, month)],
+          carryForward: null,
+          base: { draftValues, netIncomeDraft },
+        });
+      }
 
       setSaved(true);
       setTimeout(() => setSaved(false), 3500);
@@ -540,10 +642,11 @@ export function useLog(session: Session | null): UseLogResult {
     } finally {
       setSavingLog(false);
     }
-  }, [buckets, draftValues, summary, year, month, userId]);
+  }, [buckets, draftValues, netIncomeDraft, summary, year, month, userId, budgetOwnerId, savedPeriods]);
 
   return {
     loading,
+    periodLoading,
     saving,
     savingBucket,
     savingLog,

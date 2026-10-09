@@ -2,6 +2,12 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 import { Check } from "lucide-react";
 
 const ToastContext = createContext<(message: string) => void>(() => {});
+const AnnounceContext = createContext<(message: string) => void>(() => {});
+
+/** Tell screen-reader users about a change without showing anything on screen. */
+export function useAnnounce() {
+  return useContext(AnnounceContext);
+}
 
 /** Show a short confirmation that is also announced to screen readers (WCAG 4.1.3). */
 export function useToast() {
@@ -10,6 +16,7 @@ export function useToast() {
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [message, setMessage] = useState<string | null>(null);
+  const [spoken, setSpoken] = useState("");
   const timer = useRef<number | undefined>(undefined);
 
   const show = useCallback((next: string) => {
@@ -20,9 +27,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     timer.current = window.setTimeout(() => setMessage(null), 6000);
   }, []);
 
+  const announce = useCallback((next: string) => {
+    setSpoken("");
+    window.setTimeout(() => setSpoken(next), 30);
+  }, []);
+
   return (
     <ToastContext.Provider value={show}>
-      {children}
+      <AnnounceContext.Provider value={announce}>{children}</AnnounceContext.Provider>
+      <p className="sr-only" role="status" aria-live="polite">
+        {spoken}
+      </p>
       <div
         role="status"
         aria-live="polite"
