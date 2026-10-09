@@ -183,8 +183,8 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-2">
+        <div className="-ml-3 flex items-center">
           <button
             type="button"
             className={iconBtn}
@@ -209,19 +209,21 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
             <ChevronRight aria-hidden="true" />
           </button>
         </div>
-        <StatusChip tone={isCurrentPeriodSaved ? "good" : "warn"}>
-          {isCurrentPeriodSaved ? "Saved" : "Not saved yet"}
-        </StatusChip>
-        {isCurrentPeriodSaved && (
-          <button
-            type="button"
-            className={iconBtn}
-            onClick={() => setMonthMenuOpen(true)}
-            aria-label={`More options for the ${monthTitle} plan`}
-          >
-            <MoreHorizontal aria-hidden="true" />
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-1">
+          <StatusChip tone={isCurrentPeriodSaved ? "good" : "warn"}>
+            {isCurrentPeriodSaved ? "Saved" : "Not saved yet"}
+          </StatusChip>
+          {isCurrentPeriodSaved && (
+            <button
+              type="button"
+              className={`${iconBtn} -mr-2`}
+              onClick={() => setMonthMenuOpen(true)}
+              aria-label={`More options for the ${monthTitle} plan`}
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -335,15 +337,20 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
                   {items.length > 0 && (
                     <ul className="ml-3 flex flex-col border-l-2 border-border pl-3" aria-label={`Items in ${bucket.name}`}>
                       {items.map((item) => (
-                        <PlanRow
-                          key={item.id}
-                          bucket={item}
-                          value={draftValues[item.id] ?? ""}
-                          error={fieldErrors[item.id]}
-                          detail={null}
-                          onChange={(value) => changeValue(item.id, value)}
-                          onMore={() => setMenuBucket(item)}
-                        />
+                        <li key={item.id} className="flex min-h-11 items-center gap-2">
+                          <span className="min-w-0 flex-1 break-words text-foreground">{item.name}</span>
+                          <span className="font-semibold text-foreground tabular-nums">
+                            {fmt(amountValue(draftValues[item.id] ?? ""))}
+                          </span>
+                          <button
+                            type="button"
+                            className={`${iconBtn} -mr-2`}
+                            onClick={() => setMenuBucket(item)}
+                            aria-label={`More options for ${item.name}`}
+                          >
+                            <MoreHorizontal aria-hidden="true" />
+                          </button>
+                        </li>
                       ))}
                       {remaining !== undefined && (
                         <li className={`py-1 text-sm tabular-nums ${remaining < 0 ? "font-bold text-destructive" : "text-muted-foreground"}`}>
@@ -416,11 +423,20 @@ export function MonthlyPlanScreen({ session }: MonthlyPlanScreenProps) {
       {editingBucket && (
         <EditBucketDialog
           bucket={editingBucket}
+          monthValue={draftValues[editingBucket.id] ?? ""}
+          monthTitle={monthTitle}
           saving={savingBucket}
           onOpenChange={(open) => !open && setEditingBucket(null)}
           onSave={async (input) => {
             await editBucket(editingBucket.id, input);
-            toast(`${input.name} updated`);
+            if (editingBucket.parent_bucket_id !== null) {
+              // An item's amount is edited here rather than on the plan, so it
+              // also becomes this month's (unsaved) value.
+              changeValue(editingBucket.id, toInputValue(input.defaultValue));
+              toast(`${input.name} updated. Save the plan to keep it.`);
+            } else {
+              toast(`${input.name} updated`);
+            }
           }}
         />
       )}
@@ -684,11 +700,16 @@ function AddBucketDialog({
 
 function EditBucketDialog({
   bucket,
+  monthValue,
+  monthTitle,
   saving,
   onOpenChange,
   onSave,
 }: {
   bucket: Bucket;
+  /** This month's value on the plan; items are edited here instead of inline. */
+  monthValue: string;
+  monthTitle: string;
   saving: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (input: { name: string; allocationMode: AllocationMode; defaultValue: number }) => Promise<void>;
@@ -697,7 +718,7 @@ function EditBucketDialog({
   const canChooseMode = bucket.kind === "expense" && !isItem;
   const [name, setName] = useState(bucket.name);
   const [mode, setMode] = useState<AllocationMode>(bucket.allocation_mode);
-  const [amount, setAmount] = useState(toInputValue(bucket.default_value));
+  const [amount, setAmount] = useState(isItem ? monthValue : toInputValue(bucket.default_value));
   const [errors, setErrors] = useState<{ name?: string | null; amount?: string | null }>({});
   const percent = canChooseMode && mode === "percent";
 
@@ -728,7 +749,11 @@ function EditBucketDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Edit {bucket.name}</DialogTitle>
-          <DialogDescription>Changes apply to new months. This month's amount is set on the plan itself.</DialogDescription>
+          <DialogDescription>
+            {isItem
+              ? `Changes ${monthTitle} and new months. Save the plan to keep them.`
+              : "Changes apply to new months. This month's amount is set on the plan itself."}
+          </DialogDescription>
         </DialogHeader>
         <form
           className="flex flex-col gap-4"
@@ -753,8 +778,8 @@ function EditBucketDialog({
           {canChooseMode && <AllocationChoice value={mode} onChange={setMode} name="edit-bucket-mode" />}
           <Field
             id="edit-bucket-amount"
-            label={percent ? "Usual share of income" : "Usual amount each month"}
-            hint="Used to fill in new months."
+            label={isItem ? "Amount each month" : percent ? "Usual share of income" : "Usual amount each month"}
+            hint={isItem ? undefined : "Used to fill in new months."}
             error={errors.amount}
           >
             <MoneyInput
@@ -766,7 +791,7 @@ function EditBucketDialog({
                 if (errors.amount) setErrors((prev) => ({ ...prev, amount: null }));
               }}
               error={errors.amount}
-              describedById={describedBy("edit-bucket-amount", true, errors.amount)}
+              describedById={describedBy("edit-bucket-amount", !isItem, errors.amount)}
             />
           </Field>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
