@@ -1,24 +1,16 @@
 import { useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import {
-  ChevronDown,
-  ChevronUp,
-  Pencil,
-  PlusCircle,
-  Target,
-  Trash2,
-} from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "../components/ui/dialog";
+import { MoreHorizontal, Pencil, Plus, Target, Trash2, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
+import { btnOutline, btnPrimary, iconBtn } from "../components/ui/buttonStyles";
+import { ActionSheet, ConfirmDialog, Field, MoneyInput, StatusChip, describedBy } from "../components/ui/kit";
 import { PageLoader } from "../components/PageLoader";
+import { useToast } from "../components/Toast";
 import { useBudgets } from "../hooks/useBudgets";
-import { fmt } from "../lib/format";
+import { fmt, fmtDate, toInputValue } from "../lib/format";
+import { amountError, amountValue, nameError } from "../lib/validation";
+import { budgetStatus } from "../lib/budgetStatus";
 import type { BudgetExpense, BudgetWithSpend } from "@/lib/supabase/database.types";
 
 interface BudgetsScreenProps {
@@ -28,434 +20,293 @@ interface BudgetsScreenProps {
 const fmtExpenseDate = (dateOnly: string) => {
   const [year, month, day] = dateOnly.split("-").map(Number);
   if (!year || !month || !day) return dateOnly;
-  return new Date(year, month - 1, day).toLocaleDateString("en-AU", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return fmtDate(new Date(year, month - 1, day));
 };
 
 export function BudgetsScreen({ session }: BudgetsScreenProps) {
-  const {
-    loading,
-    saving,
-    error,
-    budgets,
-    hasBudgets,
-    totals,
-    addBudget,
-    editBudget,
-    removeBudget,
-    addExpense,
-    removeExpense,
-  } = useBudgets(session);
+  const { loading, saving, error, budgets, hasBudgets, totals, addBudget, editBudget, removeBudget, addExpense, removeExpense } =
+    useBudgets(session);
+  const toast = useToast();
 
-  const [addOpen, setAddOpen] = useState(false);
-  const [editing, setEditing] = useState<BudgetWithSpend | null>(null);
+  const [budgetDialog, setBudgetDialog] = useState<{ budget: BudgetWithSpend | null } | null>(null);
+  const [menuBudget, setMenuBudget] = useState<BudgetWithSpend | null>(null);
+  const [budgetToDelete, setBudgetToDelete] = useState<BudgetWithSpend | null>(null);
   const [expenseTarget, setExpenseTarget] = useState<BudgetWithSpend | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<BudgetExpense | null>(null);
 
   if (loading) {
     return <PageLoader />;
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-medium text-foreground mb-1">Budgets 🎯</h1>
-          <p className="text-muted-foreground text-sm">
-            Set aside money for an occasion, then track what you spend against it.
-          </p>
-        </div>
-
-        {hasBudgets && (
-          <AddBudgetDialog
-            open={addOpen}
-            onOpenChange={setAddOpen}
-            onAdd={addBudget}
-            saving={saving}
-            triggerLabel="Add"
-          />
-        )}
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <h1 tabIndex={-1} className="text-2xl font-semibold text-foreground focus:outline-none">
+          Budgets
+        </h1>
+        <p className="text-muted-foreground">
+          Money set aside for one occasion, like a trip or a holiday season. Log what you spend to see what's left.
+        </p>
       </div>
 
       {error && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p role="alert" className="rounded-2xl border-2 border-destructive bg-card px-4 py-3 font-semibold text-destructive">
           {error}
-        </div>
+        </p>
       )}
 
       {!hasBudgets ? (
-        <EmptyBudgetsState open={addOpen} onOpenChange={setAddOpen} onAdd={addBudget} saving={saving} />
+        <section className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-10 text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-muted" aria-hidden="true">
+            <Target className="size-6 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-semibold text-foreground">Create your first budget</h2>
+          <p className="max-w-sm text-muted-foreground">
+            Pick something specific, like "Christmas gifts" with $1,200, then log each purchase against it.
+          </p>
+          <button type="button" className={btnPrimary} onClick={() => setBudgetDialog({ budget: null })}>
+            <Plus aria-hidden="true" />
+            New budget
+          </button>
+        </section>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-3">
-            <SummaryTile label="Allocated" value={totals.allocated} />
-            <SummaryTile label="Spent" value={totals.spent} />
-            <SummaryTile label="Remaining" value={totals.remaining} tone={totals.remaining < 0 ? "negative" : "default"} />
-          </div>
+          <button type="button" className={btnPrimary} onClick={() => setBudgetDialog({ budget: null })}>
+            <Plus aria-hidden="true" />
+            New budget
+          </button>
 
-          <div className="space-y-3">
-            {budgets.map((budget) => (
-              <BudgetCard
-                key={budget.id}
-                budget={budget}
-                saving={saving}
-                onEdit={() => setEditing(budget)}
-                onDelete={() => void removeBudget(budget.id)}
-                onAddExpense={() => setExpenseTarget(budget)}
-                onRemoveExpense={(expenseId) => void removeExpense(expenseId)}
-              />
-            ))}
-          </div>
+          <section aria-label="All budgets" className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card p-4 text-center">
+            <div>
+              <p className="text-sm text-muted-foreground">Set aside</p>
+              <p className="font-bold text-foreground tabular-nums">{fmt(totals.allocated)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Spent</p>
+              <p className="font-bold text-foreground tabular-nums">{fmt(totals.spent)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">{totals.remaining < 0 ? "Over" : "Left"}</p>
+              <p className={`font-bold tabular-nums ${totals.remaining < 0 ? "text-destructive" : "text-foreground"}`}>
+                {fmt(Math.abs(totals.remaining))}
+              </p>
+            </div>
+          </section>
+
+          {budgets.map((budget) => (
+            <BudgetCard
+              key={budget.id}
+              budget={budget}
+              onMore={() => setMenuBudget(budget)}
+              onLogExpense={() => setExpenseTarget(budget)}
+              onRemoveExpense={setExpenseToDelete}
+            />
+          ))}
         </>
       )}
 
-      {editing && (
-        <EditBudgetDialog
-          budget={editing}
-          open={editing !== null}
-          onOpenChange={(open) => !open && setEditing(null)}
-          onSave={editBudget}
+      {budgetDialog && (
+        <BudgetDialog
+          budget={budgetDialog.budget}
           saving={saving}
+          onOpenChange={(open) => !open && setBudgetDialog(null)}
+          onSave={async (input) => {
+            if (budgetDialog.budget) {
+              await editBudget(budgetDialog.budget.id, input);
+              toast(`${input.name} updated`);
+            } else {
+              await addBudget(input);
+              toast(`${input.name} created`);
+            }
+          }}
         />
       )}
+
+      <ActionSheet
+        open={menuBudget !== null}
+        onOpenChange={(open) => !open && setMenuBudget(null)}
+        title={menuBudget?.name ?? ""}
+        description={menuBudget ? `Budget ${fmt(menuBudget.amount)}` : undefined}
+        actions={[
+          { label: "Edit", icon: <Pencil aria-hidden="true" />, onSelect: () => setBudgetDialog({ budget: menuBudget }) },
+          { label: "Delete budget", icon: <Trash2 aria-hidden="true" />, destructive: true, onSelect: () => setBudgetToDelete(menuBudget) },
+        ]}
+      />
+
+      <ConfirmDialog
+        open={budgetToDelete !== null}
+        onOpenChange={(open) => !open && setBudgetToDelete(null)}
+        title={`Delete ${budgetToDelete?.name ?? "this budget"}?`}
+        description={
+          budgetToDelete && budgetToDelete.expenses.length > 0
+            ? `Its ${budgetToDelete.expenses.length} logged ${budgetToDelete.expenses.length === 1 ? "expense" : "expenses"} (${fmt(
+                budgetToDelete.spent,
+              )}) will be deleted too. This can't be undone.`
+            : "This can't be undone."
+        }
+        confirmLabel="Delete budget"
+        onConfirm={async () => {
+          if (!budgetToDelete) return;
+          await removeBudget(budgetToDelete.id);
+          toast(`${budgetToDelete.name} deleted`);
+        }}
+      />
 
       {expenseTarget && (
-        <AddExpenseDialog
+        <LogExpenseDialog
           budget={expenseTarget}
-          open={expenseTarget !== null}
-          onOpenChange={(open) => !open && setExpenseTarget(null)}
-          onAdd={addExpense}
           saving={saving}
+          onOpenChange={(open) => !open && setExpenseTarget(null)}
+          onAdd={async (input) => {
+            await addExpense(expenseTarget.id, input);
+            const left = expenseTarget.remaining - input.amount;
+            toast(`Logged. ${expenseTarget.name} has ${left < 0 ? `${fmt(Math.abs(left))} over` : `${fmt(left)} left`}.`);
+          }}
         />
       )}
-    </div>
-  );
-}
 
-function SummaryTile({
-  label,
-  value,
-  tone = "default",
-}: {
-  label: string;
-  value: number;
-  tone?: "default" | "negative";
-}) {
-  return (
-    <div className="bg-card rounded-xl border border-border px-3 py-3 text-center">
-      <p className="text-xs text-muted-foreground mb-1">{label}</p>
-      <p
-        className={`text-sm font-medium tabular-nums ${
-          tone === "negative" ? "text-destructive" : "text-foreground"
-        }`}
-      >
-        {fmt(value)}
-      </p>
+      <ConfirmDialog
+        open={expenseToDelete !== null}
+        onOpenChange={(open) => !open && setExpenseToDelete(null)}
+        title={`Remove ${expenseToDelete?.name ?? "this expense"}?`}
+        description={
+          expenseToDelete
+            ? `${fmt(Number(expenseToDelete.amount))} from ${fmtExpenseDate(expenseToDelete.incurred_at)} will be removed and added back to what's left.`
+            : ""
+        }
+        confirmLabel="Remove expense"
+        onConfirm={async () => {
+          if (!expenseToDelete) return;
+          await removeExpense(expenseToDelete.id);
+          toast(`${expenseToDelete.name} removed`);
+        }}
+      />
     </div>
   );
 }
 
 function BudgetCard({
   budget,
-  saving,
-  onEdit,
-  onDelete,
-  onAddExpense,
+  onMore,
+  onLogExpense,
   onRemoveExpense,
 }: {
   budget: BudgetWithSpend;
-  saving: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
-  onAddExpense: () => void;
-  onRemoveExpense: (expenseId: string) => void;
+  onMore: () => void;
+  onLogExpense: () => void;
+  onRemoveExpense: (expense: BudgetExpense) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const status = budgetStatus(budget);
   const fillWidth = Math.min(100, budget.spentPercent);
-  const remainingPercentLabel = Math.round(budget.remainingPercent);
+  const listId = `expenses-${budget.id}`;
+  const count = budget.expenses.length;
 
   return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden">
-      <div className="px-4 py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{budget.name}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Budget {fmt(budget.amount)}</p>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label={`Edit ${budget.name}`}
-            >
-              <Pencil className="size-3.5" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={onDelete}
-              className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
-              aria-label={`Delete ${budget.name}`}
-            >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-            </button>
-          </div>
+    <section aria-labelledby={`budget-${budget.id}`} className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <h2 id={`budget-${budget.id}`} className="break-words text-lg font-semibold text-foreground">
+            {budget.name}
+          </h2>
+          <p className="text-sm text-muted-foreground tabular-nums">Budget {fmt(budget.amount)}</p>
         </div>
-
-        <div className="mt-3">
-          <div className="h-2 rounded-full bg-muted overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                budget.overspent ? "bg-destructive" : "bg-foreground"
-              }`}
-              style={{ width: `${fillWidth}%` }}
-            />
-          </div>
-          <div className="mt-2 flex items-center justify-between text-xs">
-            <span className="text-muted-foreground tabular-nums">
-              {fmt(budget.spent)} spent · {Math.round(budget.spentPercent)}%
-            </span>
-            <span
-              className={`font-medium tabular-nums ${
-                budget.overspent ? "text-destructive" : "text-foreground"
-              }`}
-            >
-              {budget.overspent
-                ? `${fmt(Math.abs(budget.remaining))} over`
-                : `${fmt(budget.remaining)} left · ${remainingPercentLabel}%`}
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onAddExpense}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-foreground text-background font-medium text-xs transition-all duration-150 hover:opacity-90 active:scale-95"
-          >
-            <PlusCircle size={14} />
-            Add expense
-          </button>
-          {budget.expenses.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setExpanded((prev) => !prev)}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-              aria-expanded={expanded}
-            >
-              {budget.expenses.length} {budget.expenses.length === 1 ? "expense" : "expenses"}
-              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {expanded && budget.expenses.length > 0 && (
-        <div className="border-t border-border divide-y divide-border">
-          {budget.expenses.map((expense) => (
-            <ExpenseRow
-              key={expense.id}
-              expense={expense}
-              saving={saving}
-              onDelete={() => onRemoveExpense(expense.id)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ExpenseRow({
-  expense,
-  saving,
-  onDelete,
-}: {
-  expense: BudgetExpense;
-  saving: boolean;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="px-4 py-2.5 flex items-center gap-3 bg-muted/20">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-foreground truncate">{expense.name}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{fmtExpenseDate(expense.incurred_at)}</p>
-      </div>
-      <p className="text-sm font-medium text-foreground tabular-nums shrink-0">
-        {fmt(Number(expense.amount))}
-      </p>
-      <button
-        type="button"
-        disabled={saving}
-        onClick={onDelete}
-        className="p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50 shrink-0"
-        aria-label={`Delete ${expense.name}`}
-      >
-        <Trash2 className="size-3.5" aria-hidden="true" />
-      </button>
-    </div>
-  );
-}
-
-function EmptyBudgetsState({
-  open,
-  onOpenChange,
-  onAdd,
-  saving,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onAdd: (input: { name: string; amount: number }) => Promise<void>;
-  saving: boolean;
-}) {
-  return (
-    <div className="bg-card rounded-xl border border-border px-6 py-12 text-center">
-      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-        <Target size={24} className="text-muted-foreground" />
-      </div>
-      <h2 className="text-lg font-medium text-foreground mb-2">Create your first budget</h2>
-      <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6">
-        Name a budget for an occasion — like an annual bonus for travel and family visits — set its
-        amount, then log expenses against it to see how much is left.
-      </p>
-      <AddBudgetDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        onAdd={onAdd}
-        saving={saving}
-        triggerLabel="Create a budget"
-      />
-    </div>
-  );
-}
-
-function AddBudgetDialog({
-  open,
-  onOpenChange,
-  onAdd,
-  saving,
-  triggerLabel,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onAdd: (input: { name: string; amount: number }) => Promise<void>;
-  saving: boolean;
-  triggerLabel: string;
-}) {
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-
-  const reset = () => {
-    setName("");
-    setAmount("");
-  };
-
-  const handleSubmit = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-
-    const value = amount.trim() === "" ? 0 : parseFloat(amount);
-    if (Number.isNaN(value) || value < 0) return;
-
-    try {
-      await onAdd({ name: trimmed, amount: value });
-      reset();
-      onOpenChange(false);
-    } catch {
-      // Error surfaced via hook state.
-    }
-  };
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
-      }}
-    >
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 shrink-0"
-        >
-          <PlusCircle size={16} />
-          {triggerLabel}
+        <StatusChip tone={status.tone}>{status.label}</StatusChip>
+        <button type="button" className={`${iconBtn} -mt-2 -mr-2`} onClick={onMore} aria-label={`More options for ${budget.name}`}>
+          <MoreHorizontal aria-hidden="true" />
         </button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-medium">New budget</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          <div>
-            <label htmlFor="add-budget-name" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Name
-            </label>
-            <Input
-              id="add-budget-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Annual Bonus ✈️"
-            />
-          </div>
-          <div>
-            <label htmlFor="add-budget-amount" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Budget amount
-            </label>
-            <Input
-              id="add-budget-amount"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={0.01}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="10000"
-            />
-          </div>
+      </div>
+
+      <div
+        className="h-2.5 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label={`${budget.name} spending`}
+        aria-valuemin={0}
+        aria-valuemax={budget.amount}
+        aria-valuenow={Math.min(budget.spent, budget.amount)}
+        aria-valuetext={`${fmt(budget.spent)} of ${fmt(budget.amount)} spent`}
+      >
+        <div
+          className={`h-full rounded-full ${budget.overspent ? "bg-destructive" : "bg-primary"}`}
+          style={{ width: `${fillWidth}%` }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-1 tabular-nums">
+        <span className="text-foreground">
+          {fmt(budget.spent)} spent ({Math.round(budget.spentPercent)}%)
+        </span>
+        <strong className={budget.overspent ? "text-destructive" : "text-foreground"}>
+          {budget.overspent ? `${fmt(Math.abs(budget.remaining))} over` : `${fmt(budget.remaining)} left`}
+        </strong>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={btnPrimary} onClick={onLogExpense}>
+          <Plus aria-hidden="true" />
+          Log expense
+        </button>
+        {count > 0 && (
           <button
             type="button"
-            disabled={saving || !name.trim()}
-            onClick={() => void handleSubmit()}
-            className="w-full py-2.5 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 mt-2 disabled:opacity-50"
+            className={btnOutline}
+            aria-expanded={expanded}
+            aria-controls={listId}
+            onClick={() => setExpanded((prev) => !prev)}
           >
-            {saving ? "Adding…" : "Add budget"}
+            {expanded ? "Hide" : "Show"} {count} {count === 1 ? "expense" : "expenses"}
           </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        )}
+      </div>
+
+      {expanded && count > 0 && (
+        <ul id={listId} className="divide-y divide-border border-t border-border" aria-label={`Expenses for ${budget.name}`}>
+          {budget.expenses.map((expense) => (
+            <li key={expense.id} className="flex items-center gap-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="break-words font-semibold text-foreground">{expense.name}</p>
+                <p className="text-sm text-muted-foreground">{fmtExpenseDate(expense.incurred_at)}</p>
+              </div>
+              <span className="font-semibold text-foreground tabular-nums">{fmt(Number(expense.amount))}</span>
+              <button
+                type="button"
+                className={iconBtn}
+                onClick={() => onRemoveExpense(expense)}
+                aria-label={`Remove ${expense.name}`}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
-function EditBudgetDialog({
+function BudgetDialog({
   budget,
-  open,
+  saving,
   onOpenChange,
   onSave,
-  saving,
 }: {
-  budget: BudgetWithSpend;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSave: (budgetId: string, input: { name: string; amount: number }) => Promise<void>;
+  budget: BudgetWithSpend | null;
   saving: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (input: { name: string; amount: number }) => Promise<void>;
 }) {
-  const [name, setName] = useState(budget.name);
-  const [amount, setAmount] = useState(String(budget.amount));
+  const [name, setName] = useState(budget?.name ?? "");
+  const [amount, setAmount] = useState(budget ? toInputValue(budget.amount) : "");
+  const [errors, setErrors] = useState<{ name?: string | null; amount?: string | null }>({});
 
-  const handleSave = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-
-    const value = amount.trim() === "" ? 0 : parseFloat(amount);
-    if (Number.isNaN(value) || value < 0) return;
-
+  const handleSubmit = async () => {
+    const next = { name: nameError(name, "budget"), amount: amountError(amount, { allowZero: false }) };
+    setErrors(next);
+    if (next.name || next.amount) {
+      document.getElementById(next.name ? "budget-name" : "budget-amount")?.focus();
+      return;
+    }
     try {
-      await onSave(budget.id, { name: trimmed, amount: value });
+      await onSave({ name: name.trim(), amount: amountValue(amount) });
       onOpenChange(false);
     } catch {
       // Error surfaced via hook state.
@@ -463,85 +314,92 @@ function EditBudgetDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" onCloseAutoFocus={(event) => event.preventDefault()}>
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-medium">Edit budget</DialogTitle>
+          <DialogTitle>{budget ? `Edit ${budget.name}` : "New budget"}</DialogTitle>
+          <DialogDescription>
+            {budget && budget.spent > 0
+              ? `${fmt(budget.spent)} is already logged against this budget.`
+              : "Set money aside for one occasion."}
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 pt-2">
-          <div>
-            <label htmlFor="edit-budget-name" className="text-xs text-muted-foreground mb-1.5 block">
-              Name
-            </label>
-            <Input id="edit-budget-name" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div>
-            <label htmlFor="edit-budget-amount" className="text-xs text-muted-foreground mb-1.5 block">
-              Budget amount
-            </label>
+        <form
+          className="flex flex-col gap-4"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <Field id="budget-name" label="What is it for?" hint="For example: Christmas gifts, Japan trip" error={errors.name}>
             <Input
-              id="edit-budget-amount"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={0.01}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              id="budget-name"
+              value={name}
+              aria-invalid={errors.name ? true : undefined}
+              aria-describedby={describedBy("budget-name", true, errors.name)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errors.name) setErrors((prev) => ({ ...prev, name: null }));
+              }}
             />
+          </Field>
+          <Field id="budget-amount" label="How much are you setting aside?" error={errors.amount}>
+            <MoneyInput
+              id="budget-amount"
+              value={amount}
+              onChange={(value) => {
+                setAmount(value);
+                if (errors.amount) setErrors((prev) => ({ ...prev, amount: null }));
+              }}
+              error={errors.amount}
+              describedById={describedBy("budget-amount", false, errors.amount)}
+            />
+          </Field>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <button type="button" className={`${btnOutline} flex-1`} onClick={() => onOpenChange(false)}>
+              Cancel
+            </button>
+            <button type="submit" className={`${btnPrimary} flex-1`} disabled={saving}>
+              {saving ? "Saving…" : budget ? "Save changes" : "Create budget"}
+            </button>
           </div>
-          {budget.spent > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {fmt(budget.spent)} already spent across {budget.expenses.length}{" "}
-              {budget.expenses.length === 1 ? "expense" : "expenses"}.
-            </p>
-          )}
-          <button
-            type="button"
-            disabled={saving || !name.trim()}
-            onClick={() => void handleSave()}
-            className="w-full bg-foreground text-background font-medium rounded-lg py-2.5 text-sm disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save budget"}
-          </button>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   );
 }
 
-function AddExpenseDialog({
+function LogExpenseDialog({
   budget,
-  open,
+  saving,
   onOpenChange,
   onAdd,
-  saving,
 }: {
   budget: BudgetWithSpend;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onAdd: (
-    budgetId: string,
-    input: { name: string; amount: number; incurredAt?: string },
-  ) => Promise<void>;
   saving: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAdd: (input: { name: string; amount: number; incurredAt?: string }) => Promise<void>;
 }) {
   const today = new Date().toLocaleDateString("en-CA");
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [incurredAt, setIncurredAt] = useState(today);
+  const [errors, setErrors] = useState<{ name?: string | null; amount?: string | null; date?: string | null }>({});
 
   const handleSubmit = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-
-    const value = amount.trim() === "" ? 0 : parseFloat(amount);
-    if (Number.isNaN(value) || value < 0) return;
-
+    const next = {
+      name: nameError(name, "expense"),
+      amount: amountError(amount, { allowZero: false }),
+      date: incurredAt ? null : "Choose the date you spent it.",
+    };
+    setErrors(next);
+    if (next.name || next.amount || next.date) {
+      document.getElementById(next.name ? "expense-name" : next.amount ? "expense-amount" : "expense-date")?.focus();
+      return;
+    }
     try {
-      await onAdd(budget.id, { name: trimmed, amount: value, incurredAt });
-      setName("");
-      setAmount("");
-      setIncurredAt(today);
+      await onAdd({ name: name.trim(), amount: amountValue(amount), incurredAt });
       onOpenChange(false);
     } catch {
       // Error surfaced via hook state.
@@ -549,61 +407,66 @@ function AddExpenseDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" onCloseAutoFocus={(event) => event.preventDefault()}>
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-medium">Add expense</DialogTitle>
+          <DialogTitle>Log expense</DialogTitle>
+          <DialogDescription>
+            For {budget.name}.{" "}
+            {budget.overspent ? `${fmt(Math.abs(budget.remaining))} over budget.` : `${fmt(budget.remaining)} left.`}
+          </DialogDescription>
         </DialogHeader>
-        <p className="text-xs text-muted-foreground -mt-1">
-          Against {budget.name} · {fmt(budget.remaining)} left
-        </p>
-        <div className="space-y-3 py-2">
-          <div>
-            <label htmlFor="add-expense-name" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              What was it?
-            </label>
+        <form
+          className="flex flex-col gap-4"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <Field id="expense-name" label="What did you buy?" error={errors.name}>
             <Input
-              id="add-expense-name"
+              id="expense-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Flights to Türkiye ✈️"
+              aria-invalid={errors.name ? true : undefined}
+              aria-describedby={describedBy("expense-name", false, errors.name)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (errors.name) setErrors((prev) => ({ ...prev, name: null }));
+              }}
             />
-          </div>
-          <div>
-            <label htmlFor="add-expense-amount" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Amount
-            </label>
-            <Input
-              id="add-expense-amount"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={0.01}
+          </Field>
+          <Field id="expense-amount" label="Amount" error={errors.amount}>
+            <MoneyInput
+              id="expense-amount"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="1200"
+              onChange={(value) => {
+                setAmount(value);
+                if (errors.amount) setErrors((prev) => ({ ...prev, amount: null }));
+              }}
+              error={errors.amount}
+              describedById={describedBy("expense-amount", false, errors.amount)}
             />
-          </div>
-          <div>
-            <label htmlFor="add-expense-date" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Date
-            </label>
+          </Field>
+          <Field id="expense-date" label="Date" error={errors.date}>
             <Input
-              id="add-expense-date"
+              id="expense-date"
               type="date"
               value={incurredAt}
+              aria-invalid={errors.date ? true : undefined}
+              aria-describedby={describedBy("expense-date", false, errors.date)}
               onChange={(e) => setIncurredAt(e.target.value)}
             />
+          </Field>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <button type="button" className={`${btnOutline} flex-1`} onClick={() => onOpenChange(false)}>
+              Cancel
+            </button>
+            <button type="submit" className={`${btnPrimary} flex-1`} disabled={saving}>
+              {saving ? "Logging…" : "Log expense"}
+            </button>
           </div>
-          <button
-            type="button"
-            disabled={saving || !name.trim()}
-            onClick={() => void handleSubmit()}
-            className="w-full py-2.5 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 mt-2 disabled:opacity-50"
-          >
-            {saving ? "Adding…" : "Add expense"}
-          </button>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

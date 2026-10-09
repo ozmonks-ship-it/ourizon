@@ -1,23 +1,16 @@
-import { createContext, useContext, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { Home, PieChart, Target, Wallet, type LucideIcon } from "lucide-react";
 import { OurizonLogo } from "./OurizonLogo";
 import { CollaboratorsMenu } from "./CollaboratorsMenu";
 
 export type NavScreen = "dashboard" | "assets" | "monthly" | "budgets";
 
-/** True while the bottom nav-bar is hidden (scrolled away). */
-const NavHiddenContext = createContext(false);
-
-/** Read whether the bottom nav-bar is currently hidden. */
-export function useNavHidden() {
-  return useContext(NavHiddenContext);
-}
-
-const NAV: { id: NavScreen; label: string; emoji: string; enabled: boolean }[] = [
-  { id: "dashboard", label: "Home", emoji: "🏠", enabled: true },
-  { id: "assets", label: "Assets", emoji: "💰", enabled: true },
-  { id: "monthly", label: "Buckets", emoji: "🪣", enabled: true },
-  { id: "budgets", label: "Budgets", emoji: "🎯", enabled: true },
+export const NAV: { id: NavScreen; label: string; Icon: LucideIcon }[] = [
+  { id: "dashboard", label: "Home", Icon: Home },
+  { id: "assets", label: "Assets", Icon: Wallet },
+  { id: "monthly", label: "Monthly plan", Icon: PieChart },
+  { id: "budgets", label: "Budgets", Icon: Target },
 ];
 
 export function AppLayout({
@@ -31,84 +24,84 @@ export function AppLayout({
   screen: NavScreen;
   onNavigate: (id: NavScreen) => void;
 }) {
-  const [navHidden, setNavHidden] = useState(false);
-  const lastScrollTop = useRef(0);
+  const mainRef = useRef<HTMLElement>(null);
+  const firstRender = useRef(true);
 
-  function handleScroll(e: React.UIEvent<HTMLElement>) {
-    const current = e.currentTarget.scrollTop;
-    const last = lastScrollTop.current;
-    // Ignore tiny scroll jitters and rubber-band overscroll at the top.
-    if (Math.abs(current - last) < 8) return;
+  // Name the page and move focus to its heading on navigation, so screen-reader
+  // users hear where they are (WCAG 2.4.2, 2.4.3).
+  useEffect(() => {
+    const label = NAV.find((item) => item.id === screen)?.label ?? "Home";
+    document.title = `${label} · Ourizon`;
 
-    if (current > last && current > 24) {
-      // Scrolling down past the top — hide the nav.
-      setNavHidden(true);
-    } else if (current < last) {
-      // Scrolling up — reveal the nav.
-      setNavHidden(false);
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
     }
-    lastScrollTop.current = current;
-  }
+    const main = mainRef.current;
+    if (!main) return;
+    main.scrollTo({ top: 0 });
+    main.focus({ preventScroll: true });
+
+    // Screens show a loader first; focus the heading once it renders.
+    const focusHeading = () => {
+      const heading = main.querySelector<HTMLElement>("h1");
+      if (!heading) return false;
+      heading.focus({ preventScroll: true });
+      return true;
+    };
+    if (focusHeading()) return;
+    const observer = new MutationObserver(() => {
+      if (focusHeading()) observer.disconnect();
+    });
+    observer.observe(main, { childList: true, subtree: true });
+    const timeout = window.setTimeout(() => observer.disconnect(), 5000);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timeout);
+    };
+  }, [screen]);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-background">
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm shrink-0">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background">
+      <header className="shrink-0 border-b border-border bg-card/50 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2">
-            <OurizonLogo size={28} />
-            <span className="text-lg font-medium text-foreground">Ourizon</span>
+            <OurizonLogo size={30} />
+            <span className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Fredoka', sans-serif" }}>
+              Ourizon
+            </span>
           </div>
-          <div className="flex items-center gap-2">
-            <CollaboratorsMenu session={session} />
-          </div>
+          <CollaboratorsMenu session={session} />
         </div>
       </header>
 
-      <main
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto pb-20 scroll-smooth"
-      >
-        <div className="max-w-3xl mx-auto px-4 py-6">
-          <NavHiddenContext.Provider value={navHidden}>
-            {children}
-          </NavHiddenContext.Provider>
-        </div>
+      <main ref={mainRef} tabIndex={-1} className="flex-1 overflow-y-auto scroll-smooth focus:outline-none">
+        <div className="mx-auto max-w-3xl px-4 pt-6 pb-8">{children}</div>
       </main>
 
-      <nav
-        aria-label="Main navigation"
-        className={`fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border flex z-50 transition-transform duration-300 ease-in-out ${
-          navHidden ? "translate-y-full" : "translate-y-0"
-        }`}
-      >
-        {NAV.map(({ id, label, emoji, enabled }) => {
-          const active = id === screen;
-          return (
-            <button
-              key={id}
-              type="button"
-              disabled={!enabled}
-              onClick={() => enabled && onNavigate(id)}
-              aria-current={active ? "page" : undefined}
-              aria-label={label}
-              className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-xs font-medium transition-all duration-200 ${
-                active
-                  ? "text-foreground"
-                  : enabled
-                    ? "text-muted-foreground"
-                    : "text-muted-foreground/40 cursor-not-allowed"
-              }`}
-            >
-              <span
-                className={`text-xl transition-transform duration-200 ${active ? "scale-110" : ""}`}
-                aria-hidden="true"
+      <nav aria-label="Main" className="shrink-0 border-t border-border bg-card pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto grid max-w-3xl grid-cols-4">
+          {NAV.map(({ id, label, Icon }) => {
+            const active = id === screen;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onNavigate(id)}
+                aria-current={active ? "page" : undefined}
+                className={`relative flex min-h-16 flex-col items-center justify-center gap-1 px-1 text-sm font-bold transition-colors ${
+                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
               >
-                {emoji}
-              </span>
-              <span>{label}</span>
-            </button>
-          );
-        })}
+                {active && (
+                  <span className="absolute inset-x-1/4 top-0 h-[3px] rounded-b-full bg-primary" aria-hidden="true" />
+                )}
+                <Icon className="size-6" aria-hidden="true" strokeWidth={active ? 2.4 : 2} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
     </div>
   );

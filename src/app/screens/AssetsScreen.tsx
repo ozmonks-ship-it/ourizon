@@ -1,46 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  type DotProps,
-} from "recharts";
-import { Check, Pencil, PlusCircle, Trash2, Wallet } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "../components/ui/dialog";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Check, MoreHorizontal, Pencil, Plus, Trash2, Wallet } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { btnOutline, btnPrimary, iconBtn } from "../components/ui/buttonStyles";
+import { ActionSheet, Callout, ConfirmDialog, Field, FieldError, MoneyInput, describedBy } from "../components/ui/kit";
 import { PageLoader } from "../components/PageLoader";
+import { useToast } from "../components/Toast";
 import { ASSET_GROUPS } from "../data/assetGroups";
-import {
-  clearAssetsDraft,
-  loadAssetsDraft,
-  mergeDraftWithAssets,
-  saveAssetsDraft,
-} from "../lib/assetsDraftStorage";
+import { clearAssetsDraft, loadAssetsDraft, mergeDraftWithAssets, saveAssetsDraft } from "../lib/assetsDraftStorage";
 import { useAssets } from "../hooks/useAssets";
-import { fmt, fmtK, fmtSnapshotDate } from "../lib/format";
+import { fmt, fmtDate, fmtK, toInputValue } from "../lib/format";
+import { amountError, amountValue, nameError } from "../lib/validation";
 import type { AssetGroupId, AssetWithBalance, NetWorthPoint } from "@/lib/supabase/database.types";
 
 interface AssetsScreenProps {
   session: Session;
 }
+
+const HISTORY_PREVIEW = 4;
 
 export function AssetsScreen({ session }: AssetsScreenProps) {
   const {
@@ -59,17 +39,18 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
     removeSnapshot,
     getSnapshotBalancesForEdit,
   } = useAssets(session);
+  const toast = useToast();
 
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [editingBalances, setEditingBalances] = useState(false);
   const [editingSnapshotId, setEditingSnapshotId] = useState<string | null>(null);
-  const [selectedSnapshot, setSelectedSnapshot] = useState<NetWorthPoint | null>(null);
   const [draftBalances, setDraftBalances] = useState<Record<string, string>>({});
-  const [newAsset, setNewAsset] = useState({
-    name: "",
-    institution: "",
-    groupId: "cash" as AssetGroupId,
-  });
+  const [balanceErrors, setBalanceErrors] = useState<Record<string, string>>({});
+  const [assetMenu, setAssetMenu] = useState<AssetWithBalance | null>(null);
+  const [assetToRemove, setAssetToRemove] = useState<AssetWithBalance | null>(null);
+  const [recordMenu, setRecordMenu] = useState<NetWorthPoint | null>(null);
+  const [recordToDelete, setRecordToDelete] = useState<NetWorthPoint | null>(null);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   const userId = session.user.id;
   const draftRestored = useRef(false);
@@ -102,90 +83,85 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
     })).filter((group) => group.accounts.length > 0);
   }, [assets]);
 
+  const editingRecord = editingSnapshotId
+    ? netWorthHistory.find((point) => point.id === editingSnapshotId) ?? null
+    : null;
+  const previousBalances = useMemo(
+    () => (editingSnapshotId ? getSnapshotBalancesForEdit(editingSnapshotId) : null),
+    [editingSnapshotId, getSnapshotBalancesForEdit],
+  );
+  const previousBalance = (asset: AssetWithBalance) =>
+    previousBalances ? previousBalances[asset.id] ?? 0 : asset.balance;
+
+  const draftTotal = assets.reduce((sum, asset) => sum + amountValue(draftBalances[asset.id] ?? ""), 0);
+  const changedCount = assets.filter((asset) => {
+    const before = previousBalance(asset);
+    const raw = draftBalances[asset.id] ?? "";
+    return amountError(raw) === null && amountValue(raw) !== (before ?? 0);
+  }).length;
+
   const startEditingBalances = () => {
     const nextDraft: Record<string, string> = {};
     for (const asset of assets) {
-      nextDraft[asset.id] = asset.balance === null ? "" : String(asset.balance);
+      nextDraft[asset.id] = toInputValue(asset.balance);
     }
     setEditingSnapshotId(null);
     setDraftBalances(nextDraft);
+    setBalanceErrors({});
     setEditingBalances(true);
+    window.requestAnimationFrame(() => document.querySelector<HTMLInputElement>("[data-balance-input-wrap] input")?.focus());
   };
 
   const startEditingSnapshot = (snapshot: NetWorthPoint) => {
     const balances = getSnapshotBalancesForEdit(snapshot.id);
     const nextDraft: Record<string, string> = {};
     for (const asset of assets) {
-      nextDraft[asset.id] = String(balances[asset.id] ?? 0);
+      nextDraft[asset.id] = toInputValue(balances[asset.id] ?? 0);
     }
     setEditingSnapshotId(snapshot.id);
     setDraftBalances(nextDraft);
+    setBalanceErrors({});
     setEditingBalances(true);
-    setSelectedSnapshot(null);
+    document.querySelector("main")?.scrollTo({ top: 0 });
   };
 
   const cancelEditingBalances = () => {
     setEditingBalances(false);
     setEditingSnapshotId(null);
     setDraftBalances({});
+    setBalanceErrors({});
     clearAssetsDraft(userId);
   };
 
   const confirmBalances = async () => {
+    const errors: Record<string, string> = {};
     const parsed: Record<string, number> = {};
-
     for (const asset of assets) {
-      const raw = draftBalances[asset.id]?.trim() ?? "";
-      const value = raw === "" ? 0 : parseFloat(raw);
-      if (Number.isNaN(value) || value < 0) return;
-      parsed[asset.id] = value;
+      const raw = draftBalances[asset.id] ?? "";
+      const problem =
+        raw.trim() === "" ? "Enter a balance. Use 0 if the account is empty." : amountError(raw);
+      if (problem) errors[asset.id] = problem;
+      else parsed[asset.id] = amountValue(raw);
+    }
+    setBalanceErrors(errors);
+
+    const firstError = assets.find((asset) => errors[asset.id]);
+    if (firstError) {
+      document.getElementById(`asset-balance-${firstError.id}`)?.focus();
+      const count = Object.keys(errors).length;
+      toast(`${count} ${count === 1 ? "balance needs" : "balances need"} fixing before you can save`);
+      return;
     }
 
     try {
       if (editingSnapshotId) {
         await updateSnapshot(editingSnapshotId, parsed);
+        toast(`Balances updated for ${fmtDate(editingRecord?.recordedAt ?? new Date())}`);
       } else {
         await saveBalances(parsed);
+        toast(`Balances saved for ${fmtDate(new Date())}`);
       }
       cancelEditingBalances();
-    } catch {
-      // Error surfaced via hook state.
-    }
-  };
-
-  const handleDeleteSnapshot = async () => {
-    if (!selectedSnapshot) return;
-
-    try {
-      if (editingSnapshotId === selectedSnapshot.id) {
-        cancelEditingBalances();
-      }
-      await removeSnapshot(selectedSnapshot.id);
-      setSelectedSnapshot(null);
-    } catch {
-      // Error surfaced via hook state.
-    }
-  };
-
-  const handleAddAsset = async () => {
-    if (!newAsset.name.trim()) return;
-
-    try {
-      await addAsset({
-        name: newAsset.name,
-        institution: newAsset.institution,
-        groupId: newAsset.groupId,
-      });
-      setNewAsset({ name: "", institution: "", groupId: "cash" });
-      setDialogOpen(false);
-    } catch {
-      // Error surfaced via hook state.
-    }
-  };
-
-  const handleDeleteAsset = async (assetId: string) => {
-    try {
-      await removeAsset(assetId);
     } catch {
       // Error surfaced via hook state.
     }
@@ -195,403 +171,462 @@ export function AssetsScreen({ session }: AssetsScreenProps) {
     return <PageLoader />;
   }
 
-  return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-medium text-foreground mb-1">Your Assets 💼</h1>
-          {hasSnapshots ? (
-            <p className="text-muted-foreground text-sm">
-              Total: <span className="font-medium text-foreground">{fmt(totalNetWorth)}</span>
-            </p>
-          ) : hasAssets ? (
-            <p className="text-muted-foreground text-sm">Update balances to track your net worth.</p>
-          ) : (
-            <p className="text-muted-foreground text-sm">Add your accounts and investments to get started.</p>
-          )}
-        </div>
+  const lastUpdated = netWorthHistory[netWorthHistory.length - 1];
+  const historyNewestFirst = [...netWorthHistory].reverse();
+  const visibleHistory = showAllHistory ? historyNewestFirst : historyNewestFirst.slice(0, HISTORY_PREVIEW);
 
-        {hasAssets && (
-          <AddAssetDialog
-            open={dialogOpen}
-            onOpenChange={setDialogOpen}
-            newAsset={newAsset}
-            setNewAsset={setNewAsset}
-            onAdd={handleAddAsset}
-            saving={saving}
-            triggerLabel="Add"
-          />
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <h1 tabIndex={-1} className="text-2xl font-semibold text-foreground focus:outline-none">
+          Assets
+        </h1>
+        {editingBalances ? (
+          <p className="text-muted-foreground">
+            New total <strong className="text-foreground tabular-nums">{fmt(draftTotal)}</strong>
+          </p>
+        ) : hasSnapshots && lastUpdated ? (
+          <p className="text-muted-foreground">
+            Total <strong className="text-foreground tabular-nums">{fmt(totalNetWorth)}</strong> · last updated{" "}
+            {fmtDate(lastUpdated.recordedAt)}
+          </p>
+        ) : hasAssets ? (
+          <p className="text-muted-foreground">Record your balances to start tracking your net worth.</p>
+        ) : (
+          <p className="text-muted-foreground">Everything you own that has a dollar value.</p>
         )}
       </div>
 
       {error && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <p role="alert" className="rounded-2xl border-2 border-destructive bg-card px-4 py-3 font-semibold text-destructive">
           {error}
-        </div>
+        </p>
       )}
 
       {!hasAssets ? (
-        <EmptyAssetsState
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          newAsset={newAsset}
-          setNewAsset={setNewAsset}
-          onAdd={handleAddAsset}
-          saving={saving}
-        />
+        <section className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-10 text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-muted" aria-hidden="true">
+            <Wallet className="size-6 text-muted-foreground" />
+          </div>
+          <h2 className="text-xl font-semibold text-foreground">Add your first account</h2>
+          <p className="max-w-sm text-muted-foreground">
+            Start with your everyday bank account. You can add shares, property and super afterwards.
+          </p>
+          <button type="button" className={btnPrimary} onClick={() => setAddOpen(true)}>
+            <Plus aria-hidden="true" />
+            Add an account
+          </button>
+        </section>
       ) : (
         <>
-          {hasSnapshots && (
-            <div className="bg-card rounded-xl p-5 border border-border">
-              <h2 className="font-medium text-base text-foreground mb-0.5">Net Worth 📈</h2>
-              <p className="text-xs text-muted-foreground mb-4">
-                Click a point to edit or delete a snapshot
-              </p>
-              <ResponsiveContainer width="100%" height={160}>
-                <AreaChart data={netWorthHistory} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.08} vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 10, fill: "currentColor", opacity: 0.5, fontWeight: 500 }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    tickFormatter={fmtK}
-                    tick={{ fontSize: 10, fill: "currentColor", opacity: 0.5, fontWeight: 500 }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={45}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [fmt(value), "Net worth"]}
-                    wrapperStyle={{ pointerEvents: "none" }}
-                    contentStyle={{
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      fontSize: 11,
-                      pointerEvents: "none",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    fill="currentColor"
-                    fillOpacity={0.1}
-                    strokeOpacity={0.6}
-                    animationDuration={1200}
-                    animationEasing="ease-out"
-                    dot={({ key, ...props }) => (
-                      <SnapshotChartDot key={key} {...props} onSelect={setSelectedSnapshot} />
-                    )}
-                    activeDot={({ key, ...props }) => (
-                      <SnapshotChartDot
-                        key={key}
-                        {...props}
-                        onSelect={setSelectedSnapshot}
-                        active
-                      />
-                    )}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+          {editingBalances ? (
+            <Callout
+              title={
+                editingRecord
+                  ? `Editing the balances you recorded on ${fmtDate(editingRecord.recordedAt)}`
+                  : `Recording balances for ${fmtDate(new Date())}`
+              }
+            >
+              Change any amount that's different, then save. {changedCount} of {assets.length} changed.
+            </Callout>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={`${btnPrimary} flex-1`} onClick={startEditingBalances} disabled={saving}>
+                <Pencil aria-hidden="true" />
+                {hasSnapshots ? "Update balances" : "Record balances"}
+              </button>
+              <button type="button" className={btnOutline} onClick={() => setAddOpen(true)}>
+                <Plus aria-hidden="true" />
+                Add account
+              </button>
             </div>
           )}
 
-          <SnapshotActionDialog
-            snapshot={selectedSnapshot}
-            saving={saving}
-            onClose={() => setSelectedSnapshot(null)}
-            onEdit={() => selectedSnapshot && startEditingSnapshot(selectedSnapshot)}
-            onDelete={() => void handleDeleteSnapshot()}
-          />
-
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              {editingBalances
-                ? editingSnapshotId
-                  ? `Editing snapshot from ${fmtSnapshotDate(
-                      netWorthHistory.find((point) => point.id === editingSnapshotId)?.recordedAt ?? "",
-                    )}.`
-                  : "Enter balances for all assets, then save once."
-                : hasSnapshots
-                  ? "Balances reflect your latest saved snapshot."
-                  : "Save your first balance snapshot to start the net worth chart."}
-            </p>
-            {!editingBalances ? (
-              <button
-                type="button"
-                onClick={startEditingBalances}
-                disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50"
+          {groupedAssets.map((group) => {
+            const groupTotal = group.accounts.reduce(
+              (sum, asset) =>
+                sum + (editingBalances ? amountValue(draftBalances[asset.id] ?? "") : asset.balance ?? 0),
+              0,
+            );
+            return (
+              <section
+                key={group.id}
+                aria-labelledby={`group-${group.id}`}
+                className="flex flex-col rounded-2xl border border-border bg-card px-4 py-3"
               >
-                <Pencil size={16} />
-                Update balances
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={cancelEditingBalances}
-                  disabled={saving}
-                  className="px-3 py-2 rounded-lg bg-muted text-foreground font-medium text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void confirmBalances()}
-                  disabled={saving}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50"
-                >
-                  <Check size={16} />
-                  {saving ? "Saving…" : editingSnapshotId ? "Save changes" : "Save snapshot"}
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            {groupedAssets.map((group) => {
-              const groupTotal = group.accounts.reduce((sum, asset) => {
-                if (editingBalances) {
-                  const raw = draftBalances[asset.id]?.trim() ?? "";
-                  const value = raw === "" ? 0 : parseFloat(raw);
-                  return sum + (Number.isNaN(value) ? 0 : value);
-                }
-                return sum + (asset.balance ?? 0);
-              }, 0);
-
-              return (
-                <div key={group.id} className="bg-card rounded-xl border border-border overflow-hidden">
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-muted/30">
-                    <p className="font-medium text-sm flex-1 text-foreground">{group.label}</p>
-                    <p className="font-medium text-foreground text-base">
-                      {hasSnapshots || editingBalances ? fmtK(groupTotal) : "—"}
-                    </p>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {group.accounts.map((asset) => (
-                      <AssetRow
-                        key={asset.id}
-                        asset={asset}
-                        editing={editingBalances}
-                        draftValue={draftBalances[asset.id] ?? ""}
-                        onDraftChange={(value) =>
-                          setDraftBalances((prev) => ({ ...prev, [asset.id]: value }))
-                        }
-                        showBalance={hasSnapshots || editingBalances}
-                        onDelete={() => void handleDeleteAsset(asset.id)}
-                        saving={saving}
-                      />
-                    ))}
-                  </div>
+                <div className="flex items-center gap-3 pb-1">
+                  <h2 id={`group-${group.id}`} className="flex-1 text-lg font-semibold text-foreground">
+                    {group.label}
+                  </h2>
+                  {(hasSnapshots || editingBalances) && (
+                    <span className="font-bold text-foreground tabular-nums">{fmt(groupTotal)}</span>
+                  )}
                 </div>
-              );
-            })}
-          </div>
+                <ul className="divide-y divide-border">
+                  {group.accounts.map((asset) => (
+                    <AssetRow
+                      key={asset.id}
+                      asset={asset}
+                      editing={editingBalances}
+                      showBalance={hasSnapshots}
+                      draftValue={draftBalances[asset.id] ?? ""}
+                      previousBalance={previousBalance(asset)}
+                      error={balanceErrors[asset.id]}
+                      onDraftChange={(value) => {
+                        setDraftBalances((prev) => ({ ...prev, [asset.id]: value }));
+                        if (balanceErrors[asset.id]) {
+                          setBalanceErrors((prev) => {
+                            const next = { ...prev };
+                            delete next[asset.id];
+                            return next;
+                          });
+                        }
+                      }}
+                      onMore={() => setAssetMenu(asset)}
+                    />
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+
+          {!editingBalances && hasSnapshots && (
+            <section aria-labelledby="history-heading" className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-5">
+              <h2 id="history-heading" className="text-lg font-semibold text-foreground">
+                Balance history
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Each time you save balances, a record is added here. Fix a past record if you typed something
+                wrong.
+              </p>
+              {netWorthHistory.length > 1 && <NetWorthChart history={netWorthHistory} />}
+              <ul className="divide-y divide-border">
+                {visibleHistory.map((point) => (
+                  <li key={point.id} className="flex items-center gap-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-foreground">{fmtDate(point.recordedAt)}</p>
+                      <p className="text-sm text-muted-foreground tabular-nums">Net worth {fmt(point.value)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className={iconBtn}
+                      onClick={() => setRecordMenu(point)}
+                      aria-label={`More options for the ${fmtDate(point.recordedAt)} record`}
+                    >
+                      <MoreHorizontal aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {netWorthHistory.length > HISTORY_PREVIEW && (
+                <button
+                  type="button"
+                  className={`${btnOutline} self-start`}
+                  aria-expanded={showAllHistory}
+                  onClick={() => setShowAllHistory((prev) => !prev)}
+                >
+                  {showAllHistory ? "Show fewer" : `Show all ${netWorthHistory.length} records`}
+                </button>
+              )}
+            </section>
+          )}
+
+          {editingBalances && (
+            <div className="sticky bottom-0 -mx-4 -mb-8 flex gap-2 border-t border-border bg-background px-4 pt-3 pb-4">
+              <button type="button" className={`${btnOutline} flex-1`} onClick={cancelEditingBalances} disabled={saving}>
+                Cancel
+              </button>
+              <button type="button" className={`${btnPrimary} flex-1`} onClick={() => void confirmBalances()} disabled={saving}>
+                <Check aria-hidden="true" />
+                {saving ? "Saving…" : "Save balances"}
+              </button>
+            </div>
+          )}
         </>
       )}
-    </div>
-  );
-}
 
-function SnapshotChartDot({
-  cx,
-  cy,
-  payload,
-  onSelect,
-  active = false,
-}: DotProps & { onSelect: (point: NetWorthPoint) => void; active?: boolean }) {
-  if (cx == null || cy == null || !payload) return null;
-
-  const point = payload as NetWorthPoint;
-  const visibleRadius = active ? 7 : 5;
-
-  return (
-    <g
-      className="cursor-pointer"
-      style={{ pointerEvents: "all" }}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect(point);
-      }}
-    >
-      <circle cx={cx} cy={cy} r={14} fill="transparent" aria-hidden="true" />
-      <circle
-        cx={cx}
-        cy={cy}
-        r={visibleRadius}
-        fill="currentColor"
-        stroke={active ? "var(--background)" : "none"}
-        strokeWidth={active ? 2 : 0}
-        className={active ? "opacity-100" : "opacity-70 hover:opacity-100"}
-      />
-    </g>
-  );
-}
-
-function SnapshotActionDialog({
-  snapshot,
-  saving,
-  onClose,
-  onEdit,
-  onDelete,
-}: {
-  snapshot: NetWorthPoint | null;
-  saving: boolean;
-  onClose: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <Dialog open={snapshot !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="font-medium">Snapshot</DialogTitle>
-        </DialogHeader>
-        {snapshot && (
-          <div className="space-y-4 py-1">
-            <div>
-              <p className="text-sm text-muted-foreground">{fmtSnapshotDate(snapshot.recordedAt)}</p>
-              <p className="text-xl font-medium text-foreground mt-1">{fmt(snapshot.value)}</p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={onEdit}
-                disabled={saving}
-                className="flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 disabled:opacity-50"
-              >
-                <Pencil size={16} />
-                Edit balances
-              </button>
-              <button
-                type="button"
-                onClick={onDelete}
-                disabled={saving}
-                className="flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg border border-border bg-card text-foreground font-medium text-sm transition-colors hover:bg-muted disabled:opacity-50"
-              >
-                <Trash2 size={16} />
-                {saving ? "Deleting…" : "Delete snapshot"}
-              </button>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function EmptyAssetsState({
-  open,
-  onOpenChange,
-  newAsset,
-  setNewAsset,
-  onAdd,
-  saving,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  newAsset: { name: string; institution: string; groupId: AssetGroupId };
-  setNewAsset: React.Dispatch<
-    React.SetStateAction<{ name: string; institution: string; groupId: AssetGroupId }>
-  >;
-  onAdd: () => void | Promise<void>;
-  saving: boolean;
-}) {
-  return (
-    <div className="bg-card rounded-xl border border-border px-6 py-12 text-center">
-      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-        <Wallet size={24} className="text-muted-foreground" />
-      </div>
-      <h2 className="text-lg font-medium text-foreground mb-2">Add your first asset</h2>
-      <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6">
-        Start by adding your bank accounts, investments, property, or super funds. You can save
-        balance snapshots later to build your net worth chart.
-      </p>
       <AddAssetDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        newAsset={newAsset}
-        setNewAsset={setNewAsset}
-        onAdd={onAdd}
+        open={addOpen}
+        onOpenChange={setAddOpen}
         saving={saving}
-        triggerLabel="Add your first asset"
+        onAdd={async (input) => {
+          await addAsset(input);
+          toast(`${input.name.trim()} added`);
+        }}
+      />
+
+      <ActionSheet
+        open={assetMenu !== null}
+        onOpenChange={(next) => !next && setAssetMenu(null)}
+        title={assetMenu?.name ?? ""}
+        description={assetMenu?.institution}
+        actions={[
+          {
+            label: "Remove account",
+            icon: <Trash2 aria-hidden="true" />,
+            destructive: true,
+            onSelect: () => setAssetToRemove(assetMenu),
+          },
+        ]}
+      />
+
+      <ConfirmDialog
+        open={assetToRemove !== null}
+        onOpenChange={(next) => !next && setAssetToRemove(null)}
+        title={`Remove ${assetToRemove?.name ?? "this account"}?`}
+        description={
+          netWorthHistory.length > 0
+            ? `Its balance will be removed from all ${netWorthHistory.length} balance records, so your past net worth will change. This can't be undone.`
+            : "This can't be undone."
+        }
+        confirmLabel="Remove account"
+        onConfirm={async () => {
+          if (!assetToRemove) return;
+          await removeAsset(assetToRemove.id);
+          toast(`${assetToRemove.name} removed`);
+        }}
+      />
+
+      <ActionSheet
+        open={recordMenu !== null}
+        onOpenChange={(next) => !next && setRecordMenu(null)}
+        title={recordMenu ? fmtDate(recordMenu.recordedAt) : ""}
+        description={recordMenu ? `Net worth ${fmt(recordMenu.value)}` : undefined}
+        actions={[
+          {
+            label: "Edit balances",
+            icon: <Pencil aria-hidden="true" />,
+            onSelect: () => recordMenu && startEditingSnapshot(recordMenu),
+          },
+          {
+            label: "Delete record",
+            icon: <Trash2 aria-hidden="true" />,
+            destructive: true,
+            onSelect: () => setRecordToDelete(recordMenu),
+          },
+        ]}
+      />
+
+      <ConfirmDialog
+        open={recordToDelete !== null}
+        onOpenChange={(next) => !next && setRecordToDelete(null)}
+        title="Delete this balance record?"
+        description={`The balances you recorded on ${
+          recordToDelete ? fmtDate(recordToDelete.recordedAt) : ""
+        } will be removed from your history and charts. This can't be undone.`}
+        confirmLabel="Delete record"
+        onConfirm={async () => {
+          if (!recordToDelete) return;
+          if (editingSnapshotId === recordToDelete.id) cancelEditingBalances();
+          await removeSnapshot(recordToDelete.id);
+          toast("Balance record deleted");
+        }}
       />
     </div>
+  );
+}
+
+function NetWorthChart({ history }: { history: NetWorthPoint[] }) {
+  const first = history[0];
+  const last = history[history.length - 1];
+  const summary = `Net worth went from ${fmt(first.value)} on ${fmtDate(first.recordedAt)} to ${fmt(
+    last.value,
+  )} on ${fmtDate(last.recordedAt)}. Each record is listed below.`;
+
+  return (
+    <div role="img" aria-label={summary}>
+      <ResponsiveContainer width="100%" height={170}>
+        <AreaChart data={history} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+          <CartesianGrid stroke="var(--border)" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 12, fill: "var(--muted-foreground)", fontWeight: 600 }}
+            axisLine={false}
+            tickLine={false}
+            interval="preserveStartEnd"
+            minTickGap={24}
+          />
+          <YAxis
+            tickFormatter={fmtK}
+            tick={{ fontSize: 12, fill: "var(--muted-foreground)", fontWeight: 600 }}
+            axisLine={false}
+            tickLine={false}
+            width={56}
+          />
+          <Tooltip
+            formatter={(value: number) => [fmt(value), "Net worth"]}
+            contentStyle={{
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              fontSize: 14,
+              color: "var(--foreground)",
+            }}
+          />
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke="var(--primary)"
+            strokeWidth={3}
+            fill="var(--primary)"
+            fillOpacity={0.15}
+            dot={{ r: 3, fill: "var(--primary)", strokeWidth: 0 }}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function AssetRow({
+  asset,
+  editing,
+  showBalance,
+  draftValue,
+  previousBalance,
+  error,
+  onDraftChange,
+  onMore,
+}: {
+  asset: AssetWithBalance;
+  editing: boolean;
+  showBalance: boolean;
+  draftValue: string;
+  previousBalance: number | null;
+  error?: string;
+  onDraftChange: (value: string) => void;
+  onMore: () => void;
+}) {
+  const inputId = `asset-balance-${asset.id}`;
+
+  if (editing) {
+    return (
+      <li className="flex flex-col gap-1.5 py-2.5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-36 flex-1">
+            <label htmlFor={inputId} className="break-words font-semibold text-foreground">
+              {asset.name}
+            </label>
+            <p id={`${inputId}-hint`} className="text-sm text-muted-foreground">
+              {asset.institution}
+              {previousBalance !== null && ` · was ${fmt(previousBalance)}`}
+            </p>
+          </div>
+          <div data-balance-input-wrap>
+            <MoneyInput
+              id={inputId}
+              value={draftValue}
+              onChange={onDraftChange}
+              error={error}
+              compact
+              describedById={describedBy(inputId, true, error)}
+            />
+          </div>
+        </div>
+        <FieldError id={inputId} error={error} />
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex items-center gap-3 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="break-words font-semibold text-foreground">{asset.name}</p>
+        <p className="text-sm text-muted-foreground">{asset.institution}</p>
+      </div>
+      <span className="font-semibold text-foreground tabular-nums">
+        {showBalance ? fmt(asset.balance ?? 0) : "No balance yet"}
+      </span>
+      <button type="button" className={iconBtn} onClick={onMore} aria-label={`More options for ${asset.name}`}>
+        <MoreHorizontal aria-hidden="true" />
+      </button>
+    </li>
   );
 }
 
 function AddAssetDialog({
   open,
   onOpenChange,
-  newAsset,
-  setNewAsset,
   onAdd,
   saving,
-  triggerLabel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  newAsset: { name: string; institution: string; groupId: AssetGroupId };
-  setNewAsset: React.Dispatch<
-    React.SetStateAction<{ name: string; institution: string; groupId: AssetGroupId }>
-  >;
-  onAdd: () => void | Promise<void>;
+  onAdd: (input: { name: string; institution: string; groupId: AssetGroupId }) => Promise<void>;
   saving: boolean;
-  triggerLabel: string;
 }) {
+  const [name, setName] = useState("");
+  const [institution, setInstitution] = useState("");
+  const [groupId, setGroupId] = useState<AssetGroupId>("cash");
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = () => {
+    setName("");
+    setInstitution("");
+    setGroupId("cash");
+    setError(null);
+  };
+
+  const handleSubmit = async () => {
+    const problem = nameError(name, "account");
+    setError(problem);
+    if (problem) {
+      document.getElementById("asset-name")?.focus();
+      return;
+    }
+    try {
+      await onAdd({ name, institution, groupId });
+      reset();
+      onOpenChange(false);
+    } catch {
+      // Error surfaced via hook state.
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95"
-        >
-          <PlusCircle size={16} />
-          {triggerLabel}
-        </button>
-      </DialogTrigger>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) reset();
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-medium">Add New Asset</DialogTitle>
+          <DialogTitle>Add an account</DialogTitle>
+          <DialogDescription>Add the name now. You'll enter its balance when you update balances.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 py-2">
-          <div>
-            <label htmlFor="asset-name" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Asset Name
-            </label>
+        <form
+          className="flex flex-col gap-4"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSubmit();
+          }}
+        >
+          <Field id="asset-name" label="Account name" hint="For example: Everyday account, Home loan offset" error={error}>
             <Input
               id="asset-name"
-              placeholder="Investment Property - Sydney"
-              value={newAsset.name}
-              onChange={(e) => setNewAsset({ ...newAsset, name: e.target.value })}
+              value={name}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={describedBy("asset-name", true, error)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (error) setError(null);
+              }}
             />
-          </div>
-          <div>
-            <label htmlFor="asset-institution" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Institution / Provider
-            </label>
+          </Field>
+          <Field id="asset-institution" label="Bank or provider (optional)">
             <Input
               id="asset-institution"
-              placeholder="Ray White, Self-managed"
-              value={newAsset.institution}
-              onChange={(e) => setNewAsset({ ...newAsset, institution: e.target.value })}
+              placeholder="e.g. CommBank"
+              value={institution}
+              onChange={(e) => setInstitution(e.target.value)}
             />
-          </div>
-          <div>
-            <label htmlFor="asset-type" className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Asset Type
-            </label>
-            <Select
-              value={newAsset.groupId}
-              onValueChange={(val) => setNewAsset({ ...newAsset, groupId: val as AssetGroupId })}
-            >
+          </Field>
+          <Field id="asset-type" label="Type">
+            <Select value={groupId} onValueChange={(val) => setGroupId(val as AssetGroupId)}>
               <SelectTrigger id="asset-type">
                 <SelectValue />
               </SelectTrigger>
@@ -603,89 +638,17 @@ function AddAssetDialog({
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <button type="button" className={`${btnOutline} flex-1`} onClick={() => onOpenChange(false)}>
+              Cancel
+            </button>
+            <button type="submit" className={`${btnPrimary} flex-1`} disabled={saving}>
+              {saving ? "Adding…" : "Add account"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => void onAdd()}
-            disabled={saving || !newAsset.name.trim()}
-            className="w-full py-2.5 rounded-lg bg-foreground text-background font-medium text-sm transition-all duration-150 hover:opacity-90 active:scale-95 mt-2 disabled:opacity-50"
-          >
-            {saving ? "Adding…" : "Add Asset"}
-          </button>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function AssetRow({
-  asset,
-  editing,
-  draftValue,
-  onDraftChange,
-  showBalance,
-  onDelete,
-  saving,
-}: {
-  asset: AssetWithBalance;
-  editing: boolean;
-  draftValue: string;
-  onDraftChange: (value: string) => void;
-  showBalance: boolean;
-  onDelete: () => void;
-  saving: boolean;
-}) {
-  const balanceInputId = `asset-balance-${asset.id}`;
-
-  return (
-    <div className="px-4 py-3 flex items-center gap-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground">{asset.name}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{asset.institution}</p>
-      </div>
-      <div className="shrink-0 text-right">
-        {editing ? (
-          <input
-            id={balanceInputId}
-            type="number"
-            inputMode="numeric"
-            min="0"
-            step="0.01"
-            value={draftValue}
-            onChange={(e) => onDraftChange(e.target.value)}
-            placeholder="0"
-            aria-label={`Balance for ${asset.name}`}
-            className="w-28 bg-muted rounded-lg px-2.5 py-1.5 text-base font-medium text-foreground text-right focus:outline-none focus:ring-2 focus:ring-foreground/20"
-          />
-        ) : showBalance ? (
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-foreground">
-              {asset.balance === null ? fmt(0) : fmt(asset.balance)}
-            </p>
-            {!editing && (
-              <button
-                type="button"
-                onClick={onDelete}
-                disabled={saving}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                aria-label={`Delete ${asset.name}`}
-              >
-                <Trash2 size={12} aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={onDelete}
-            disabled={saving}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-            aria-label={`Delete ${asset.name}`}
-          >
-            <Trash2 size={12} aria-hidden="true" />
-          </button>
-        )}
-      </div>
-    </div>
   );
 }

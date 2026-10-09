@@ -13,7 +13,7 @@
   --secondary: #F3EFFF;
   --secondary-foreground: #1A0A3B;
   --muted: #F5F0FF;
-  --muted-foreground: #7B6DAA;
+  --muted-foreground: #574A82;
   --accent: #FF6B6B;
   --accent-foreground: #ffffff;
   --destructive: #FF4757;
@@ -39,6 +39,10 @@
   --sidebar-accent-foreground: #1A0A3B;
   --sidebar-border: rgba(124, 92, 252, 0.14);
   --sidebar-ring: #7C5CFC;
+  --field-border: #7B6DAA;
+  --focus: #6B46F5;
+  --success: #12704A;
+  --warning: #8A5A00;
 }
 
 .dark {
@@ -53,7 +57,7 @@
   --secondary: #2A1860;
   --secondary-foreground: #F0EBFF;
   --muted: #221550;
-  --muted-foreground: #9B8DC4;
+  --muted-foreground: #C3B8E6;
   --accent: #FF6B6B;
   --accent-foreground: #ffffff;
   --destructive: #FF4757;
@@ -78,6 +82,10 @@
   --sidebar-accent-foreground: #F0EBFF;
   --sidebar-border: rgba(155, 125, 255, 0.15);
   --sidebar-ring: #9B7DFF;
+  --field-border: #8C7BD0;
+  --focus: #FFD166;
+  --success: #6FDCA5;
+  --warning: #FFD166;
 }
 
 @theme inline {
@@ -119,11 +127,21 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-field-border: var(--field-border);
+  --color-focus: var(--focus);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
+  }
+
+  /* One visible focus style for every control (WCAG 2.4.7 / 2.4.13). */
+  :focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
   }
 
   body {
@@ -190,5 +208,16 @@
   input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

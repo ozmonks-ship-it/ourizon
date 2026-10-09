@@ -52,12 +52,16 @@ export function GoogleSignInButton() {
         type="button"
         onClick={handleSignIn}
         disabled={loading}
-        className="w-full flex items-center justify-center gap-3 bg-foreground text-background font-medium rounded-xl py-3.5 hover:opacity-90 active:scale-[0.98] transition-all duration-150 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+        className="w-full min-h-12 flex items-center justify-center gap-3 bg-foreground text-background font-semibold rounded-xl py-3 hover:opacity-90 transition-opacity text-base disabled:opacity-60 disabled:cursor-not-allowed"
       >
         <GoogleIcon />
         {loading ? "Redirecting…" : "Continue with Google"}
       </button>
-      {error && <p className="text-destructive text-xs mt-3">{error}</p>}
+      {error && (
+        <p role="alert" className="text-destructive text-sm font-semibold mt-3">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

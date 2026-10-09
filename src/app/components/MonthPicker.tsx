@@ -53,7 +53,7 @@ export function MonthPicker({
   const [open, setOpen] = useState(false);
   const [viewYear, setViewYear] = useState(year);
 
-  const selectedLabel = new Date(year, month - 1, 1).toLocaleString("default", {
+  const selectedLabel = new Date(year, month - 1, 1).toLocaleString("en-AU", {
     month: "long",
     year: "numeric",
   });
@@ -101,10 +101,11 @@ export function MonthPicker({
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 text-base font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-shadow"
+        className="flex min-h-11 items-center gap-2 rounded-xl border-2 border-field-border bg-background px-3 py-2 text-base font-semibold text-foreground"
       >
         <CalendarDays className="size-4 text-muted-foreground shrink-0" aria-hidden />
         <span>{selectedLabel}</span>
+        <span className="sr-only">, choose month</span>
       </button>
 
       {open && (
@@ -112,25 +113,25 @@ export function MonthPicker({
           id={listboxId}
           role="listbox"
           aria-label="Choose month"
-          className="absolute left-0 top-full z-50 mt-2 w-[min(100vw-2rem,18rem)] rounded-xl border border-border bg-popover p-3 shadow-lg"
+          className="absolute left-0 top-full z-50 mt-2 w-[min(100vw-2rem,20rem)] rounded-xl border border-border bg-popover p-3 shadow-lg"
         >
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
               type="button"
               onClick={() => setViewYear((prev) => prev - 1)}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
+              className="inline-flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
               aria-label="Previous year"
             >
-              <ChevronLeft className="size-4" aria-hidden />
+              <ChevronLeft className="size-5" aria-hidden />
             </button>
-            <p className="text-sm font-medium text-foreground tabular-nums">{viewYear}</p>
+            <p className="text-base font-bold text-foreground tabular-nums">{viewYear}</p>
             <button
               type="button"
               onClick={() => setViewYear((prev) => prev + 1)}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
+              className="inline-flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
               aria-label="Next year"
             >
-              <ChevronRight className="size-4" aria-hidden />
+              <ChevronRight className="size-5" aria-hidden />
             </button>
           </div>
 
@@ -149,12 +150,12 @@ export function MonthPicker({
                   aria-selected={isSelected}
                   aria-label={
                     isSaved
-                      ? `${monthName} ${viewYear}, buckets saved`
+                      ? `${monthName} ${viewYear}, plan saved`
                       : `${monthName} ${viewYear}`
                   }
                   onClick={() => handleSelect(monthNumber)}
                   className={cn(
-                    "relative rounded-lg px-2 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring/50",
+                    "relative min-h-11 rounded-lg px-2 py-2 text-base font-semibold transition-colors",
                     isSelected
                       ? "bg-primary text-primary-foreground"
                       : isSaved
@@ -175,14 +176,14 @@ export function MonthPicker({
           </div>
 
           {hasSavedMonthsInView && (
-            <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
               <span
                 className="inline-flex size-3 shrink-0 items-center justify-center rounded-sm bg-secondary ring-1 ring-inset ring-primary/40"
                 aria-hidden
               >
                 <span className="size-1 rounded-full bg-primary" />
               </span>
-              Buckets saved
+              Plan saved
             </p>
           )}
         </div>

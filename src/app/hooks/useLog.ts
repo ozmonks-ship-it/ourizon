@@ -47,20 +47,14 @@ function parseDraftValue(raw: string): number {
 
 /**
  * Values carried over from the most recent saved month before the selected one.
- * Shown as placeholders on an unsaved month so you can fine-tune from where you
- * left off rather than starting from scratch.
+ * They pre-fill an unsaved month as real, editable values so you can fine-tune
+ * from where you left off rather than starting from scratch.
  */
 interface CarryForwardSnapshot {
   values: Record<string, string>;
   netIncome: string;
-}
-
-const EMPTY_PLACEHOLDERS: Record<string, string> = {};
-
-/** Prefer the user's own draft entry; fall back to the carried-over value when the field is blank. */
-function pickEffectiveValue(draft: string | undefined, carried: string | undefined): string {
-  if (draft !== undefined && draft.trim() !== "") return draft;
-  return carried ?? "";
+  year: number;
+  month: number;
 }
 
 function findPreviousSavedPeriod(
@@ -81,12 +75,16 @@ function findPreviousSavedPeriod(
   return best;
 }
 
-function emptyDraftValues(bucketRows: Bucket[]): Record<string, string> {
+/** Draft for an unsaved month, pre-filled from the carried-over month. */
+function draftFromCarryForward(
+  bucketRows: Bucket[],
+  carried: CarryForwardSnapshot,
+): { draftValues: Record<string, string>; netIncomeDraft: string } {
   const draftValues: Record<string, string> = {};
   for (const bucket of bucketRows) {
-    draftValues[bucket.id] = "";
+    draftValues[bucket.id] = carried.values[bucket.id] ?? "";
   }
-  return draftValues;
+  return { draftValues, netIncomeDraft: carried.netIncome };
 }
 
 async function buildCarryForward(
@@ -109,6 +107,8 @@ async function buildCarryForward(
   return {
     values,
     netIncome: previousLog.net_income === 0 ? "" : String(previousLog.net_income),
+    year: previous.year,
+    month: previous.month,
   };
 }
 
@@ -127,8 +127,8 @@ interface UseLogResult {
   month: number;
   draftValues: Record<string, string>;
   netIncomeDraft: string;
-  placeholderValues: Record<string, string>;
-  netIncomePlaceholder: string;
+  /** The saved month an unsaved month was pre-filled from, if any. */
+  carriedFrom: { year: number; month: number } | null;
   hasIncomeBuckets: boolean;
   summary: ReturnType<typeof calculateAllocationSummary>;
   saved: boolean;
@@ -161,7 +161,7 @@ interface UseLogResult {
 export function useLog(session: Session | null): UseLogResult {
   const [selectedPeriod, setSelectedPeriodState] = useState(currentPeriod);
   const { year, month } = selectedPeriod;
-  const monthLabel = new Date(year, month - 1, 1).toLocaleString("default", {
+  const monthLabel = new Date(year, month - 1, 1).toLocaleString("en-AU", {
     month: "long",
     year: "numeric",
   });
@@ -261,20 +261,28 @@ export function useLog(session: Session | null): UseLogResult {
           (log?.monthly_log_entries ?? []).map((e) => [e.bucket_id, e]),
         );
 
-        // For an unsaved month, carry the previous saved month's values forward as
-        // placeholders so the user can fine-tune instead of starting from scratch.
+        // For an unsaved month, pre-fill the previous saved month's values so the
+        // user can fine-tune instead of starting from scratch.
         const carried = log ? null : await buildCarryForward(ownerId, monthlyLogs, year, month);
         setCarryForward(carried);
 
         const baseSnapshot = log
           ? buildDraftFromServer(bucketRows, log.net_income ?? 0, entryMap)
           : carried
-            ? { draftValues: emptyDraftValues(bucketRows), netIncomeDraft: "" }
+            ? draftFromCarryForward(bucketRows, carried)
             : buildDraftFromServer(bucketRows, 0, entryMap);
         const stored = loadDraftSnapshot(userId, year, month);
-        applyDraftSnapshot(
-          stored ? restoreDraftSnapshot(baseSnapshot, stored, bucketRows) : baseSnapshot,
-        );
+        const restored = stored ? restoreDraftSnapshot(baseSnapshot, stored, bucketRows) : baseSnapshot;
+        if (stored && carried) {
+          // Older drafts left fields blank to mean "use last month's value".
+          for (const bucket of bucketRows) {
+            if ((restored.draftValues[bucket.id] ?? "").trim() === "") {
+              restored.draftValues[bucket.id] = carried.values[bucket.id] ?? "";
+            }
+          }
+          if (restored.netIncomeDraft.trim() === "") restored.netIncomeDraft = carried.netIncome;
+        }
+        applyDraftSnapshot(restored);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load log");
       } finally {
@@ -304,7 +312,7 @@ export function useLog(session: Session | null): UseLogResult {
       id: b.id,
       kind: b.kind,
       allocationMode: b.allocation_mode,
-      value: parseDraftValue(pickEffectiveValue(draftValues[b.id], carryForward?.values[b.id])),
+      value: parseDraftValue(draftValues[b.id] ?? ""),
     }));
 
     const expense = buckets
@@ -313,18 +321,16 @@ export function useLog(session: Session | null): UseLogResult {
         id: b.id,
         kind: b.kind,
         allocationMode: b.allocation_mode,
-        value: parseDraftValue(pickEffectiveValue(draftValues[b.id], carryForward?.values[b.id])),
+        value: parseDraftValue(draftValues[b.id] ?? ""),
         parentBucketId: b.parent_bucket_id,
       }));
 
     return {
       income,
       expense,
-      fallbackNetIncome: parseDraftValue(
-        pickEffectiveValue(netIncomeDraft, carryForward?.netIncome),
-      ),
+      fallbackNetIncome: parseDraftValue(netIncomeDraft),
     };
-  }, [incomeBuckets, buckets, draftValues, netIncomeDraft, carryForward]);
+  }, [incomeBuckets, buckets, draftValues, netIncomeDraft]);
 
   const summary = useMemo(
     () =>
@@ -491,9 +497,7 @@ export function useLog(session: Session | null): UseLogResult {
       const carried = await buildCarryForward(budgetOwnerId, remainingLogs, year, month);
       setCarryForward(carried);
       applyDraftSnapshot(
-        carried
-          ? { draftValues: emptyDraftValues(buckets), netIncomeDraft: "" }
-          : buildDraftFromServer(buckets, 0, new Map()),
+        carried ? draftFromCarryForward(buckets, carried) : buildDraftFromServer(buckets, 0, new Map()),
       );
       setSaved(false);
     } catch (err) {
@@ -509,17 +513,8 @@ export function useLog(session: Session | null): UseLogResult {
     setError(null);
 
     try {
-      const effectiveValues: Record<string, string> = {};
-      for (const bucket of buckets) {
-        effectiveValues[bucket.id] = pickEffectiveValue(
-          draftValues[bucket.id],
-          carryForward?.values[bucket.id],
-        );
-      }
-      const effectiveNetIncome = pickEffectiveValue(netIncomeDraft, carryForward?.netIncome);
-
       const entries = buckets.map((bucket) => {
-        const inputValue = parseDraftValue(effectiveValues[bucket.id]);
+        const inputValue = parseDraftValue(draftValues[bucket.id] ?? "");
         const resolved = summary.byBucketId.get(bucket.id)?.resolvedAmount ?? inputValue;
         return {
           bucket_id: bucket.id,
@@ -534,10 +529,7 @@ export function useLog(session: Session | null): UseLogResult {
       }
       setSavedPeriods((prev) => new Set([...prev, periodKey(year, month)]));
 
-      // The carried-over values are now this month's saved values, so surface them
-      // as real drafts and drop the placeholders.
-      setDraftValues(effectiveValues);
-      setNetIncomeDraft(effectiveNetIncome);
+      // The pre-filled values are now this month's saved values.
       setCarryForward(null);
 
       setSaved(true);
@@ -548,7 +540,7 @@ export function useLog(session: Session | null): UseLogResult {
     } finally {
       setSavingLog(false);
     }
-  }, [buckets, draftValues, netIncomeDraft, carryForward, summary, year, month, userId]);
+  }, [buckets, draftValues, summary, year, month, userId]);
 
   return {
     loading,
@@ -565,8 +557,7 @@ export function useLog(session: Session | null): UseLogResult {
     month,
     draftValues,
     netIncomeDraft,
-    placeholderValues: carryForward?.values ?? EMPTY_PLACEHOLDERS,
-    netIncomePlaceholder: carryForward?.netIncome ?? "",
+    carriedFrom: carryForward ? { year: carryForward.year, month: carryForward.month } : null,
     hasIncomeBuckets,
     summary,
     saved,
