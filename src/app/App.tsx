@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { AppLayout, type NavScreen } from "./components/AppLayout";
 import { AssetsScreen } from "./screens/AssetsScreen";
@@ -42,6 +42,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(!isAuthCallback);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [screen, setScreen] = useState<NavScreen>("dashboard");
+  const bootstrappedUserId = useRef<string | null>(null);
 
   useEffect(() => {
     // Radix dialogs portal to <body>, so the theme class must sit on <html> (A1).
@@ -64,7 +65,14 @@ export default function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
-      setBootstrapped(false);
+      // Supabase re-emits SIGNED_IN / TOKEN_REFRESHED whenever the app regains focus.
+      // Only re-bootstrap when the user actually changes; otherwise the whole app would
+      // unmount behind the loader and lose in-progress input on every app switch.
+      const nextUserId = nextSession?.user.id ?? null;
+      if (nextUserId !== bootstrappedUserId.current) {
+        bootstrappedUserId.current = nextUserId;
+        setBootstrapped(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -82,7 +90,10 @@ export default function App() {
         }
       })
       .catch((err) => console.error("Collaboration bootstrap failed:", err))
-      .finally(() => setBootstrapped(true));
+      .finally(() => {
+        bootstrappedUserId.current = session.user.id;
+        setBootstrapped(true);
+      });
   }, [session, bootstrapped]);
 
   if (isAuthCallback) {

@@ -67,7 +67,7 @@ export function useCollaboration(session: Session | null): UseCollaborationResul
     } finally {
       setLoading(false);
     }
-  }, [session?.user]);
+  }, [session?.user.id]);
 
   useEffect(() => {
     void refresh();
